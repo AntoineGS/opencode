@@ -15,16 +15,16 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.SYNC_PAT }}
 
-      - name: Rebase onto upstream/dev
+      - name: Merge upstream/dev
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git remote add upstream https://github.com/sst/opencode.git
           git fetch upstream dev
-          git rebase upstream/dev
+          git merge --no-edit upstream/dev
 
       - name: Push
-        run: git push --force-with-lease origin ocv
+        run: git push origin ocv
 
       - name: Disable upstream workflows
         env:
@@ -85,5 +85,5 @@ jobs:
           if [ -z "$existing" ]; then
             gh issue create --repo ${{ github.repository }} \
               --title "[actions]: sync upstream failed" \
-              --body "Sync workflow failed. Likely a rebase conflict. [View run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+              --body "Sync workflow failed. Likely a merge conflict. [View run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
           fi

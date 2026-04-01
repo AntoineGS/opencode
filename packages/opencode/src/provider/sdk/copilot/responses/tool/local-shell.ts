@@ -59,7 +59,6 @@ export const localShell = createFactoryWithOutput<
   {}
 >({
   id: "openai.local_shell",
-  name: "local_shell",
   inputSchema: localShellInputSchema,
   outputSchema: localShellOutputSchema,
 })

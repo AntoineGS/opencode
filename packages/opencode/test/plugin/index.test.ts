@@ -8,6 +8,7 @@ describe("plugin builtin auth loading", () => {
     const src = await Bun.file(file).text()
 
     expect(src).toContain('const BUILTIN = ["op-anthropic-auth@0.0.2"]')
+    expect(src).toContain("Flag.OPENCODE_DISABLE_DEFAULT_PLUGINS")
     expect(src).toContain("return Config.deduplicatePlugins([...BUILTIN, ...(list ?? [])])")
     expect(src).toContain("const plugins = Plugin.plugins(cfg.plugin, Flag.OPENCODE_PURE)")
   })

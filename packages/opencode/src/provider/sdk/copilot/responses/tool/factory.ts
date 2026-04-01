@@ -1,25 +1,17 @@
 import * as util from "@ai-sdk/provider-utils"
 
+type Factory = typeof util.createProviderToolFactory
+type OutputFactory = typeof util.createProviderToolFactoryWithOutputSchema
+
+const compat = util as typeof util & {
+  createProviderDefinedToolFactory?: Factory
+  createProviderDefinedToolFactoryWithOutputSchema?: OutputFactory
+}
+
 export const createFactory =
-  (
-    util as typeof util & {
-      createProviderToolFactory?: typeof util.createProviderDefinedToolFactory
-    }
-  ).createProviderDefinedToolFactory ??
-  (
-    util as typeof util & {
-      createProviderToolFactory?: typeof util.createProviderDefinedToolFactory
-    }
-  ).createProviderToolFactory
+  compat.createProviderDefinedToolFactory ??
+  util.createProviderToolFactory
 
 export const createFactoryWithOutput =
-  (
-    util as typeof util & {
-      createProviderToolFactoryWithOutputSchema?: typeof util.createProviderDefinedToolFactoryWithOutputSchema
-    }
-  ).createProviderDefinedToolFactoryWithOutputSchema ??
-  (
-    util as typeof util & {
-      createProviderToolFactoryWithOutputSchema?: typeof util.createProviderDefinedToolFactoryWithOutputSchema
-    }
-  ).createProviderToolFactoryWithOutputSchema
+  compat.createProviderDefinedToolFactoryWithOutputSchema ??
+  util.createProviderToolFactoryWithOutputSchema

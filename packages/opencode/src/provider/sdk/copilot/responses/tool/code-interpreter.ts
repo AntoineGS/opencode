@@ -76,7 +76,6 @@ export const codeInterpreterToolFactory = createFactoryWithOutput<
   CodeInterpreterArgs
 >({
   id: "openai.code_interpreter",
-  name: "code_interpreter",
   inputSchema: codeInterpreterInputSchema,
   outputSchema: codeInterpreterOutputSchema,
 })

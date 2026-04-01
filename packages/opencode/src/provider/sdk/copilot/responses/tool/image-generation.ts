@@ -103,7 +103,6 @@ const imageGenerationToolFactory = createFactoryWithOutput<
   ImageGenerationArgs
 >({
   id: "openai.image_generation",
-  name: "image_generation",
   inputSchema: z.object({}),
   outputSchema: imageGenerationOutputSchema,
 })

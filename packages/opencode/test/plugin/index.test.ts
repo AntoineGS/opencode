@@ -9,7 +9,8 @@ describe("plugin builtin auth loading", () => {
 
     expect(src).toContain('const BUILTIN = ["op-anthropic-auth@0.0.2"]')
     expect(src).toContain("Flag.OPENCODE_DISABLE_DEFAULT_PLUGINS")
-    expect(src).toContain("return Config.deduplicatePlugins([...BUILTIN, ...(list ?? [])])")
-    expect(src).toContain("const plugins = Plugin.plugins(cfg.plugin, Flag.OPENCODE_PURE)")
+    expect(src).toContain("const BUILTIN_ORIGINS = BUILTIN.map")
+    expect(src).toContain("return Config.deduplicatePluginOrigins([...BUILTIN_ORIGINS, ...(list ?? [])])")
+    expect(src).toContain("const plugins = Plugin.plugins(cfg.plugin_origins, Flag.OPENCODE_PURE)")
   })
 })

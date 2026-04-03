@@ -54,7 +54,6 @@ import { clearSelection } from "../vim/vim-motions"
 import { vimScroll } from "../vim/vim-scroll"
 import { useVimIndicator } from "../vim/vim-indicator"
 import { emptyRows } from "./empty-selection"
-import { useTuiConfig } from "../../context/tui-config"
 
 export type PromptProps = {
   sessionID?: string
@@ -132,12 +131,11 @@ export function Prompt(props: PromptProps) {
   const { theme, syntax } = useTheme()
   const kv = useKV()
   const vimEnabled = useVimEnabled()
-  const tuiConfig = useTuiConfig()
   const mini = createMemo(() => kv.get("ui_minimal", false))
   const list = createMemo(() => props.placeholders?.normal ?? PLACEHOLDERS)
   const shell = createMemo(() => props.placeholders?.shell ?? SHELL_PLACEHOLDERS)
-  const maxHeight = createMemo(() => tuiConfig?.prompt_max_height ?? 6)
-  const showScrollbar = createMemo(() => tuiConfig?.prompt_scrollbar !== false)
+  const maxHeight = createMemo(() => cfg?.prompt_max_height ?? 6)
+  const showScrollbar = createMemo(() => cfg?.prompt_scrollbar !== false)
 
   // Scrollbar state: array of chars to render in the 1-col gutter
   const [scrollbar, setScrollbar] = createSignal<string[] | null>(null)

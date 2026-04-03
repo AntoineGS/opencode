@@ -6,7 +6,7 @@ import { createVimState } from "../../../src/cli/cmd/tui/component/vim/vim-state
 import type { VimScroll } from "../../../src/cli/cmd/tui/component/vim/vim-scroll"
 import { vimScroll } from "../../../src/cli/cmd/tui/component/vim/vim-scroll"
 import type { VimJump } from "../../../src/cli/cmd/tui/component/vim/vim-motion-jump"
-import { copyWordNext, copyWordPrev } from "../../../src/cli/cmd/tui/component/vim/vim-motions"
+import { copyWordNext, copyWordPrev, deleteSelection } from "../../../src/cli/cmd/tui/component/vim/vim-motions"
 
 function rowColToOffset(text: string, row: number, col: number) {
   let index = 0
@@ -37,7 +37,7 @@ function offsetToRowCol(text: string, offset: number) {
   return { row, col }
 }
 
-function createTextarea(text: string) {
+function createTextarea(text: string, opts?: { strict?: boolean }) {
   let sel: { start: number; end: number } | null = null
   let anchor: number | null = null
   const textarea = {
@@ -79,6 +79,7 @@ function createTextarea(text: string) {
         sel = null
         anchor = null
       },
+      resetLocalSelection() {},
       getSelection() {
         return sel
       },
@@ -94,6 +95,12 @@ function createTextarea(text: string) {
         textarea.plainText = textarea.plainText.slice(0, sel.start) + textarea.plainText.slice(sel.end)
         textarea.cursorOffset = sel.start
         sel = null
+      },
+    },
+    editBuffer: {
+      offsetToPosition(offset: number) {
+        if (opts?.strict && offset > textarea.plainText.length) return null
+        return offsetToRowCol(textarea.plainText, offset)
       },
     },
   }
@@ -122,6 +129,7 @@ function createHandler(
   options?: {
     enabled?: boolean
     mode?: "normal" | "insert" | "replace" | "visual" | "visual-line" | "copy"
+    strict?: boolean
     submit?: () => void
     autocomplete?: () => false | "@" | "/"
     flash?: (span: { start: number; end: number }) => void
@@ -135,7 +143,7 @@ function createHandler(
     }
   },
 ) {
-  const textarea = createTextarea(text)
+  const textarea = createTextarea(text, { strict: options?.strict })
   const [enabled] = createSignal(options?.enabled ?? true)
   const [mode, setMode] = createSignal<"normal" | "insert" | "replace" | "visual" | "visual-line" | "copy">(
     options?.mode ?? "normal",
@@ -1916,6 +1924,53 @@ describe("vim motion handler", () => {
     ctx.handler.handleKey(createEvent("h").event)
     expect(ctx.textarea.cursorOffset).toBe(3)
     expect((ctx.textarea as any).editorView.getSelection()).toEqual({ start: 3, end: 6 })
+  })
+
+  test("visual d deletes backward selection", () => {
+    const ctx = createHandler("abcdef")
+    ctx.textarea.cursorOffset = 4
+
+    ctx.handler.handleKey(createEvent("v").event)
+    ctx.handler.handleKey(createEvent("h").event)
+    ctx.handler.handleKey(createEvent("h").event)
+
+    ctx.handler.handleKey(createEvent("d").event)
+    expect(ctx.textarea.plainText).toBe("abf")
+    expect(ctx.state.register()).toEqual({ text: "cde", linewise: false })
+    expect(ctx.state.mode()).toBe("normal")
+  })
+
+  test("visual w d deletes selection through end of text", () => {
+    const ctx = createHandler("hello world", { strict: true })
+
+    ctx.handler.handleKey(createEvent("v").event)
+    ctx.handler.handleKey(createEvent("w").event)
+    ctx.handler.handleKey(createEvent("d").event)
+
+    expect(ctx.textarea.plainText).toBe("orld")
+    expect(ctx.state.register()).toEqual({ text: "hello w", linewise: false })
+    expect(ctx.state.mode()).toBe("normal")
+  })
+
+  test("deleteSelection uses anchor range for charwise delete", () => {
+    const textarea = createTextarea("word1 word2 word3")
+    textarea.cursorOffset = 10
+
+    const reg = deleteSelection(textarea, false, 6)
+
+    expect(textarea.plainText).toBe("word1  word3")
+    expect(reg).toEqual({ text: "word2", linewise: false })
+  })
+
+  test("deleteSelection ignores stale editor selection", () => {
+    const textarea = createTextarea("word1 word2 word3")
+    ;(textarea as any).editorView.setSelection(0, 5)
+    textarea.cursorOffset = 10
+
+    const reg = deleteSelection(textarea, false, 6)
+
+    expect(textarea.plainText).toBe("word1  word3")
+    expect(reg).toEqual({ text: "word2", linewise: false })
   })
 
   test("visual mode $ selects to end of line", () => {

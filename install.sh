@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-REPO="leohenon/opencode"
+REPO="leohenon/opencode-vim"
 INSTALL_DIR="${OCV_INSTALL_DIR:-/usr/local/bin}"
 
 # Detect platform

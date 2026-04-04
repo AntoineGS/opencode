@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Check [planned features](https://github.com/leohenon/opencode/issues/5) first. If your request is already listed, comment there instead.
+        Check [planned features](https://github.com/leohenon/opencode-vim/issues/5) first. If your request is already listed, comment there instead.
   - type: textarea
     id: description
     attributes:

@@ -5,7 +5,7 @@ import fs from "fs/promises"
 import os from "os"
 import path from "path"
 
-const REPO = "leohenon/opencode"
+const REPO = "leohenon/opencode-vim"
 
 async function latest() {
   const res = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`)

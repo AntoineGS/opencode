@@ -135,26 +135,26 @@ jobs:
           cat > tap/Formula/ocv.rb <<EOF
           class Ocv < Formula
             desc "OpenCode with Vim keybindings - AI coding assistant for the terminal"
-            homepage "https://github.com/leohenon/opencode"
+            homepage "https://github.com/leohenon/opencode-vim"
             version "${VERSION}"
             license "MIT"
 
             on_macos do
               if Hardware::CPU.arm?
-                url "https://github.com/leohenon/opencode/releases/download/v${VERSION}/ocv-darwin-arm64.zip"
+                url "https://github.com/leohenon/opencode-vim/releases/download/v${VERSION}/ocv-darwin-arm64.zip"
                 sha256 "${DARWIN_ARM64}"
               else
-                url "https://github.com/leohenon/opencode/releases/download/v${VERSION}/ocv-darwin-x64.zip"
+                url "https://github.com/leohenon/opencode-vim/releases/download/v${VERSION}/ocv-darwin-x64.zip"
                 sha256 "${DARWIN_X64}"
               end
             end
 
             on_linux do
               if Hardware::CPU.arm?
-                url "https://github.com/leohenon/opencode/releases/download/v${VERSION}/ocv-linux-arm64.tar.gz"
+                url "https://github.com/leohenon/opencode-vim/releases/download/v${VERSION}/ocv-linux-arm64.tar.gz"
                 sha256 "${LINUX_ARM64}"
               else
-                url "https://github.com/leohenon/opencode/releases/download/v${VERSION}/ocv-linux-x64.tar.gz"
+                url "https://github.com/leohenon/opencode-vim/releases/download/v${VERSION}/ocv-linux-x64.tar.gz"
                 sha256 "${LINUX_X64}"
               end
             end

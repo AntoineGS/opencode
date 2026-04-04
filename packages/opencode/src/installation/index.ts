@@ -149,7 +149,7 @@ export namespace Installation {
         const upgradeCurl = Effect.fnUntraced(
           function* (target: string) {
             const response = yield* httpOk.execute(
-              HttpClientRequest.get("https://raw.githubusercontent.com/leohenon/opencode/ocv/install.sh"),
+              HttpClientRequest.get("https://raw.githubusercontent.com/leohenon/opencode-vim/ocv/install.sh"),
             )
             const body = yield* response.text
             const bodyBytes = new TextEncoder().encode(body)
@@ -255,7 +255,7 @@ export namespace Installation {
           }
 
           const response = yield* httpOk.execute(
-            HttpClientRequest.get("https://api.github.com/repos/leohenon/opencode/releases/latest").pipe(
+            HttpClientRequest.get("https://api.github.com/repos/leohenon/opencode-vim/releases/latest").pipe(
               HttpClientRequest.acceptJson,
             ),
           )

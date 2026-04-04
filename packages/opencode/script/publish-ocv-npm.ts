@@ -70,10 +70,10 @@ const pkg = {
   license: "MIT",
   repository: {
     type: "git",
-    url: "https://github.com/leohenon/opencode",
+    url: "https://github.com/leohenon/opencode-vim",
   },
   bugs: {
-    url: "https://github.com/leohenon/opencode/issues",
+    url: "https://github.com/leohenon/opencode-vim/issues",
   },
   bin: {
     ocv: "./bin/ocv",
@@ -121,7 +121,7 @@ const os = require("os")
 const path = require("path")
 
 const version = process.env.npm_package_version
-const baseUrl = process.env.OCV_RELEASE_BASE_URL || "https://github.com/leohenon/opencode/releases/download"
+const baseUrl = process.env.OCV_RELEASE_BASE_URL || "https://github.com/leohenon/opencode-vim/releases/download"
 
 function platform() {
   const map = { darwin: "darwin", linux: "linux", win32: "windows" }

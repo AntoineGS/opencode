@@ -54,6 +54,7 @@ import { clearSelection } from "../vim/vim-motions"
 import { vimScroll } from "../vim/vim-scroll"
 import { useVimIndicator } from "../vim/vim-indicator"
 import { emptyRows } from "./empty-selection"
+import { CONSOLE_MANAGED_ICON, consoleManagedProviderLabel } from "@tui/util/provider-origin"
 
 export type PromptProps = {
   sessionID?: string
@@ -138,8 +139,16 @@ export function Prompt(props: PromptProps) {
   const [auto, setAuto] = createSignal<AutocompleteRef>()
   const maxHeight = createMemo(() => cfg?.prompt_max_height ?? 6)
   const showScrollbar = createMemo(() => cfg?.prompt_scrollbar !== false)
+  const activeOrgName = createMemo(() => sync.data.console_state.activeOrgName)
+  const canSwitchOrgs = createMemo(() => sync.data.console_state.switchableOrgCount > 1)
+  const currentProviderLabel = createMemo(() => {
+    const current = local.model.current()
+    const provider = local.model.parsed().provider
+    if (!current) return provider
+    return consoleManagedProviderLabel(sync.data.console_state.consoleManagedProviders, current.providerID, provider)
+  })
+  const hasRightContent = createMemo(() => Boolean(props.right || activeOrgName()))
 
-  // Scrollbar state: array of chars to render in the 1-col gutter
   const [scrollbar, setScrollbar] = createSignal<string[] | null>(null)
   function syncScrollbar() {
     setTimeout(() => {
@@ -160,7 +169,6 @@ export function Prompt(props: PromptProps) {
         }
         return
       }
-      // Replicate native slider half-block rendering
       const range = total - h
       const virtual = h * 2
       const size = Math.max(1, Math.floor(virtual * (h / total)))
@@ -1468,7 +1476,7 @@ export function Prompt(props: PromptProps) {
                     <text flexShrink={0} fg={dimmed() ? theme.textMuted : theme.text}>
                       {local.model.parsed().model}
                     </text>
-                    <text fg={theme.textMuted}>{local.model.parsed().provider}</text>
+                    <text fg={theme.textMuted}>{currentProviderLabel()}</text>
                     <Show when={showVariant()}>
                       <text fg={theme.textMuted}>·</text>
                       <text>
@@ -1478,7 +1486,22 @@ export function Prompt(props: PromptProps) {
                   </box>
                 </Show>
               </box>
-              {props.right}
+              <Show when={hasRightContent()}>
+                <box flexDirection="row" gap={1} alignItems="center">
+                  {props.right}
+                  <Show when={activeOrgName()}>
+                    <text
+                      fg={theme.textMuted}
+                      onMouseUp={() => {
+                        if (!canSwitchOrgs()) return
+                        command.trigger("console.org.switch")
+                      }}
+                    >
+                      {`${CONSOLE_MANAGED_ICON} ${activeOrgName()}`}
+                    </text>
+                  </Show>
+                </box>
+              </Show>
             </box>
           </box>
         </box>
@@ -1515,21 +1538,29 @@ export function Prompt(props: PromptProps) {
                 fg={
                   vimState.pending()
                     ? theme.textMuted
-                    : indicator() === "INSERT"
+                    : indicator() === "INSERT" || indicator() === "-- INSERT --"
                       ? local.agent.color(local.agent.current().name)
                       : indicator() === "VISUAL" ||
+                          indicator() === "-- VISUAL --" ||
                           indicator() === "V-LINE" ||
+                          indicator() === "-- VISUAL LINE --" ||
                           indicator() === "V-COPY" ||
-                          indicator() === "VL-COPY"
+                          indicator() === "-- V-COPY --" ||
+                          indicator() === "VL-COPY" ||
+                          indicator() === "-- VL-COPY --"
                         ? theme.text
                         : theme.textMuted
                 }
                 attributes={
                   vimState.pending() ||
                   indicator() === "VISUAL" ||
+                  indicator() === "-- VISUAL --" ||
                   indicator() === "V-LINE" ||
+                  indicator() === "-- VISUAL LINE --" ||
                   indicator() === "V-COPY" ||
-                  indicator() === "VL-COPY"
+                  indicator() === "-- V-COPY --" ||
+                  indicator() === "VL-COPY" ||
+                  indicator() === "-- VL-COPY --"
                     ? TextAttributes.BOLD
                     : undefined
                 }

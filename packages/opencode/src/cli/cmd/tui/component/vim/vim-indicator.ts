@@ -12,14 +12,14 @@ export function useVimIndicator(input: {
     const key = input.state.pending()
     if (key) return key + ".."
     if (input.state.isCopy()) {
-      if (input.copyVisual?.() === "char") return "V-COPY"
-      if (input.copyVisual?.() === "line") return "VL-COPY"
-      return "COPY"
+      if (input.copyVisual?.() === "char") return "-- V-COPY --"
+      if (input.copyVisual?.() === "line") return "-- VL-COPY --"
+      return "-- COPY --"
     }
-    if (input.state.isInsert()) return "INSERT"
-    if (input.state.isReplace()) return "REPLACE"
-    if (input.state.isVisualLine()) return "V-LINE"
-    if (input.state.isVisual()) return "VISUAL"
+    if (input.state.isInsert()) return "-- INSERT --"
+    if (input.state.isReplace()) return "-- REPLACE --"
+    if (input.state.isVisualLine()) return "-- VISUAL LINE --"
+    if (input.state.isVisual()) return "-- VISUAL --"
     return undefined
   })
 }

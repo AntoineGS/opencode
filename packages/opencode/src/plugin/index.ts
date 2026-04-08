@@ -20,7 +20,7 @@ import { parsePluginSpecifier, readPluginId, readV1Plugin, resolvePluginId } fro
 
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
-  const BUILTIN = ["op-anthropic-auth@0.0.2"]
+  const BUILTIN = ["op-anthropic-auth@0.0.7"]
   const BUILTIN_ORIGINS = BUILTIN.map((spec) => ({
     spec,
     scope: "global" as const,

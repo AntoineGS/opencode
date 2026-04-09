@@ -1,6 +1,6 @@
 <div align="center">
 
-# Opencode Vim
+# OpenCode Vim
 
 [![npm version](https://img.shields.io/npm/v/@leohenon/ocv?style=flat-square&logo=npm&logoColor=white)](https://www.npmjs.com/package/@leohenon/ocv) [![npm downloads](https://img.shields.io/npm/dm/@leohenon/ocv?style=flat-square&logo=npm&logoColor=white&color=64748b)](https://www.npmjs.com/package/@leohenon/ocv) [![CI](https://img.shields.io/github/actions/workflow/status/leohenon/opencode-vim/ci.yml?branch=ocv&style=flat-square&logo=github&logoColor=white&label=CI&color=3f8f4d)](https://github.com/leohenon/opencode-vim/actions/workflows/ci.yml) [![Last commit](https://img.shields.io/github/last-commit/leohenon/opencode-vim/ocv?style=flat-square&logo=git&logoColor=white&color=7fa6a3)](https://github.com/leohenon/opencode-vim/commits/ocv) [![Bun](https://img.shields.io/badge/runtime-Bun-f9f1e1?style=flat-square&logo=bun&logoColor=white)](https://bun.sh)
 

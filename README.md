@@ -60,10 +60,7 @@ ocv update
 
 ### Anthropic OAuth
 
-Claude account OAuth is built in with `/connect`. No extra setup is needed.
-
-> [!NOTE]
-> Anthropic now blocks third-party tools, Claude Pro/Max plan limits no longer apply, so you will need to claim/enable extra usage.
+Claude subscriptions built-in with `/connect`. No plugins or configuration needed.
 
 ### Copy Mode
 

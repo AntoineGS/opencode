@@ -15,10 +15,6 @@ import { Plugin } from "@/plugin"
 import { SystemPrompt } from "./system"
 import { Flag } from "@/flag/flag"
 import { Permission } from "@/permission"
-import { PermissionID } from "@/permission/schema"
-import { Bus } from "@/bus"
-import { Wildcard } from "@/util/wildcard"
-import { SessionID } from "@/session/schema"
 import { Auth } from "@/auth"
 import { Installation } from "@/installation"
 
@@ -234,14 +230,9 @@ export namespace LLM {
     // from the workflow service are executed via opencode's tool system
     // and results sent back over the WebSocket.
     if (language instanceof GitLabWorkflowLanguageModel) {
-      const workflow = language as GitLabWorkflowLanguageModel & {
-        sessionID?: string
-        sessionPreapprovedTools?: string[]
-        approvalHandler?: (tools: { name: string; args: string }[]) => Promise<{ approved: boolean }>
-      }
-      workflow.sessionID = input.sessionID
-      workflow.systemPrompt = system.join("\n")
-      workflow.toolExecutor = async (toolName, argsJson, _requestID) => {
+      const workflowModel = language
+      workflowModel.systemPrompt = system.join("\n")
+      workflowModel.toolExecutor = async (toolName, argsJson, _requestID) => {
         const t = tools[toolName]
         if (!t || !t.execute) {
           return { result: "", error: `Unknown tool: ${toolName}` }
@@ -262,55 +253,6 @@ export namespace LLM {
           return { result: "", error: e.message ?? String(e) }
         }
       }
-
-      const ruleset = Permission.merge(input.agent.permission ?? [], input.permission ?? [])
-      workflow.sessionPreapprovedTools = Object.keys(tools).filter((name) => {
-        const match = ruleset.findLast((rule) => Wildcard.match(name, rule.permission))
-        return !match || match.action !== "ask"
-      })
-
-      const approved = new Set<string>()
-      workflow.approvalHandler = Instance.bind(async (tools) => {
-        const names = [...new Set(tools.map((tool) => tool.name))] as string[]
-        if (names.every((name) => approved.has(name))) {
-          return { approved: true }
-        }
-
-        const id = PermissionID.ascending()
-        let reply: Permission.Reply | undefined
-        let unsub: (() => void) | undefined
-        try {
-          unsub = Bus.subscribe(Permission.Event.Replied, (evt) => {
-            if (evt.properties.requestID === id) reply = evt.properties.reply
-          })
-          const pats = tools.map((tool) => {
-            try {
-              const parsed = JSON.parse(tool.args) as Record<string, unknown>
-              const title = (parsed?.title ?? parsed?.name ?? "") as string
-              return title ? `${tool.name}: ${title}` : tool.name
-            } catch {
-              return tool.name
-            }
-          })
-          const unique = [...new Set(pats)] as string[]
-          await Permission.ask({
-            id,
-            sessionID: SessionID.make(input.sessionID),
-            permission: "workflow_tool_approval",
-            patterns: unique,
-            metadata: { tools },
-            always: unique,
-            ruleset: [],
-          })
-          for (const name of names) approved.add(name)
-          workflow.sessionPreapprovedTools = [...(workflow.sessionPreapprovedTools ?? []), ...names]
-          return { approved: true }
-        } catch {
-          return { approved: false }
-        } finally {
-          unsub?.()
-        }
-      })
     }
 
     return streamText({

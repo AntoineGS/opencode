@@ -234,14 +234,14 @@ export namespace LLM {
     // from the workflow service are executed via opencode's tool system
     // and results sent back over the WebSocket.
     if (language instanceof GitLabWorkflowLanguageModel) {
-      const workflow = language as GitLabWorkflowLanguageModel & {
+      const workflowModel = language as GitLabWorkflowLanguageModel & {
         sessionID?: string
         sessionPreapprovedTools?: string[]
-        approvalHandler?: (tools: { name: string; args: string }[]) => Promise<{ approved: boolean }>
+        approvalHandler?: (approvalTools: { name: string; args: string }[]) => Promise<{ approved: boolean }>
       }
-      workflow.sessionID = input.sessionID
-      workflow.systemPrompt = system.join("\n")
-      workflow.toolExecutor = async (toolName, argsJson, _requestID) => {
+      workflowModel.sessionID = input.sessionID
+      workflowModel.systemPrompt = system.join("\n")
+      workflowModel.toolExecutor = async (toolName, argsJson, _requestID) => {
         const t = tools[toolName]
         if (!t || !t.execute) {
           return { result: "", error: `Unknown tool: ${toolName}` }
@@ -264,17 +264,17 @@ export namespace LLM {
       }
 
       const ruleset = Permission.merge(input.agent.permission ?? [], input.permission ?? [])
-      workflow.sessionPreapprovedTools = Object.keys(tools).filter((name) => {
+      workflowModel.sessionPreapprovedTools = Object.keys(tools).filter((name) => {
         const match = ruleset.findLast((rule) => Wildcard.match(name, rule.permission))
         return !match || match.action !== "ask"
       })
 
-      const approved = new Set<string>()
-      workflow.approvalHandler = Instance.bind(async (tools) => {
-        const names = [...new Set(tools.map((tool) => tool.name))] as string[]
+      const approvedToolsForSession = new Set<string>()
+      workflowModel.approvalHandler = Instance.bind(async (approvalTools) => {
+        const uniqueNames = [...new Set(approvalTools.map((t: { name: string }) => t.name))] as string[]
         // Auto-approve tools that were already approved in this session
         // (prevents infinite approval loops for server-side MCP tools)
-        if (names.every((name) => approved.has(name))) {
+        if (uniqueNames.every((name) => approvedToolsForSession.has(name))) {
           return { approved: true }
         }
 
@@ -285,27 +285,27 @@ export namespace LLM {
           unsub = Bus.subscribe(Permission.Event.Replied, (evt) => {
             if (evt.properties.requestID === id) reply = evt.properties.reply
           })
-          const pats = tools.map((tool) => {
+          const toolPatterns = approvalTools.map((t: { name: string; args: string }) => {
             try {
-              const parsed = JSON.parse(tool.args) as Record<string, unknown>
+              const parsed = JSON.parse(t.args) as Record<string, unknown>
               const title = (parsed?.title ?? parsed?.name ?? "") as string
-              return title ? `${tool.name}: ${title}` : tool.name
+              return title ? `${t.name}: ${title}` : t.name
             } catch {
-              return tool.name
+              return t.name
             }
           })
-          const unique = [...new Set(pats)] as string[]
+          const uniquePatterns = [...new Set(toolPatterns)] as string[]
           await Permission.ask({
             id,
             sessionID: SessionID.make(input.sessionID),
             permission: "workflow_tool_approval",
-            patterns: unique,
-            metadata: { tools },
-            always: unique,
+            patterns: uniquePatterns,
+            metadata: { tools: approvalTools },
+            always: uniquePatterns,
             ruleset: [],
           })
-          for (const name of names) approved.add(name)
-          workflow.sessionPreapprovedTools = [...(workflow.sessionPreapprovedTools ?? []), ...names]
+          for (const name of uniqueNames) approvedToolsForSession.add(name)
+          workflowModel.sessionPreapprovedTools = [...(workflowModel.sessionPreapprovedTools ?? []), ...uniqueNames]
           return { approved: true }
         } catch {
           return { approved: false }

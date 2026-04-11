@@ -3,6 +3,7 @@ import { createEffect, createMemo, createSignal, Match, Show, Switch } from "sol
 import { useTheme } from "@tui/context/theme"
 import { Logo } from "../component/logo"
 import { Locale } from "@/util/locale"
+import { useProject } from "../context/project"
 import { useSync } from "../context/sync"
 import { Toast } from "../ui/toast"
 import { useArgs } from "../context/args"
@@ -26,6 +27,7 @@ export function Home() {
   const sync = useSync()
   const kv = useKV()
   const { theme } = useTheme()
+  const project = useProject()
   const route = useRouteData("home")
   const promptRef = usePromptRef()
   const command = useCommandDialog()
@@ -122,12 +124,17 @@ export function Home() {
         </box>
         <box height={1} minHeight={0} flexShrink={1} />
         <box width="100%" maxWidth={75} zIndex={1000} paddingTop={1} flexShrink={0}>
-          <TuiPluginRuntime.Slot name="home_prompt" mode="replace" workspace_id={route.workspaceID} ref={bind}>
+          <TuiPluginRuntime.Slot
+            name="home_prompt"
+            mode="replace"
+            workspace_id={project.workspace.current()}
+            ref={bind}
+          >
             <Prompt
               ref={bind}
               hint={Hint}
-              workspaceID={route.workspaceID}
-              right={<TuiPluginRuntime.Slot name="home_prompt_right" workspace_id={route.workspaceID} />}
+              workspaceID={project.workspace.current()}
+              right={<TuiPluginRuntime.Slot name="home_prompt_right" workspace_id={project.workspace.current()} />}
               placeholders={placeholder}
             />
           </TuiPluginRuntime.Slot>

@@ -46,6 +46,10 @@ function createTextarea(text: string, opts?: { strict?: boolean }) {
     get logicalCursor() {
       return offsetToRowCol(textarea.plainText, textarea.cursorOffset)
     },
+    setText(value: string) {
+      textarea.plainText = value
+      textarea.cursorOffset = Math.min(textarea.cursorOffset, value.length)
+    },
     insertText(value: string) {
       const head = textarea.plainText.slice(0, textarea.cursorOffset)
       const tail = textarea.plainText.slice(textarea.cursorOffset)
@@ -141,6 +145,7 @@ function createHandler(
       rows?: Array<{ col: number }>
       isVisual?: boolean
     }
+    data?: unknown
   },
 ) {
   const textarea = createTextarea(text, { strict: options?.strict })
@@ -148,7 +153,7 @@ function createHandler(
   const [mode, setMode] = createSignal<"normal" | "insert" | "replace" | "visual" | "visual-line" | "copy">(
     options?.mode ?? "normal",
   )
-  const [pending, setPending] = createSignal<"" | "c" | "d" | "g" | "f" | "F" | "t" | "T" | "y">("")
+  const [pending, setPending] = createSignal<"" | "c" | "d" | "g" | "z" | "f" | "F" | "t" | "T" | "y">("")
   const [lastFind, setLastFind] = createSignal<{ char: string; forward: boolean; till: boolean } | null>(null)
   const [register, setRegister] = createSignal<{ text: string; linewise: boolean } | null>(null)
   const [anchor, setAnchor] = createSignal<number | null>(null)
@@ -157,6 +162,10 @@ function createHandler(
   const [copyVisual, setCopyVisual] = createSignal<undefined | "char" | "line">(
     options?.copy?.isVisual ? "char" : undefined,
   )
+  const [meta, setMeta] = createSignal(options?.data)
+  const [undos, setUndos] = createSignal<Array<{ before: { text: string; cursor: number }; after: { text: string; cursor: number } }>>([])
+  const [redos, setRedos] = createSignal<Array<{ text: string; cursor: number }>>([])
+  const [editState, setEditState] = createSignal<{ text: string; cursor: number } | null>(null)
   const [copyCol, setCopyCol] = createSignal(options?.copy?.col ?? 0)
   const [copyIdx, setCopyIdx] = createSignal(options?.copy?.idx ?? 0)
   const copyRows = options?.copy?.rows
@@ -200,11 +209,57 @@ function createHandler(
     setReplace,
     typed,
     setTyped,
+    beginEdit(snapshot) {
+      setEditState(snapshot)
+    },
+    commitEdit(snapshot) {
+      const start = editState()
+      setEditState(null)
+      if (!start) return
+      if (start.text === snapshot.text && start.cursor === snapshot.cursor) return
+      setUndos((list) => [...list, { before: start, after: snapshot }])
+      setRedos([])
+    },
+    cancelEdit() {
+      setEditState(null)
+    },
+    push(before, after) {
+      setEditState(null)
+      if (before.text === after.text && before.cursor === after.cursor) return
+      setUndos((list) => [...list, { before, after }])
+      setRedos([])
+    },
+    undo(snapshot) {
+      const item = undos()[undos().length - 1]
+      if (!item) return
+      setUndos((list) => list.slice(0, -1))
+      setRedos((list) => [...list, snapshot])
+      setEditState(null)
+      return item.before
+    },
+    redo(snapshot) {
+      const item = redos()[redos().length - 1]
+      if (!item) return
+      setRedos((list) => list.slice(0, -1))
+      setUndos((list) => [...list, { before: snapshot, after: item }])
+      setEditState(null)
+      return item
+    },
+    resetHistory() {
+      setUndos([])
+      setRedos([])
+      setEditState(null)
+    },
+    canUndo: () => undos().length > 0,
+    canRedo: () => redos().length > 0,
     reset() {
       clearPending()
       setAnchor(null)
       setReplace(null)
       setTyped(false)
+      setUndos([])
+      setRedos([])
+      setEditState(null)
       setMode("insert")
     },
     isInsert: () => mode() === "insert",
@@ -276,6 +331,18 @@ function createHandler(
       copyScrollCalls.push(action)
     },
     autocomplete: options?.autocomplete,
+    snapshot() {
+      return {
+        text: textarea.plainText,
+        cursor: textarea.cursorOffset,
+        data: structuredClone(meta()),
+      }
+    },
+    restore(next) {
+      textarea.setText(next.text)
+      textarea.cursorOffset = Math.max(0, Math.min(next.cursor, next.text.length))
+      setMeta(next.data)
+    },
     flash: options?.flash,
   })
 
@@ -295,6 +362,8 @@ function createHandler(
     copyExitVisuals: () => copyExitVisuals,
     copyCol,
     copyIdx,
+    meta,
+    setMeta,
   }
 }
 
@@ -2194,6 +2263,244 @@ describe("vim motion handler", () => {
   })
 })
 
+describe("vim undo redo", () => {
+  test("u undoes and ctrl+r redoes normal mode edits", () => {
+    const ctx = createHandler("abcd")
+    ctx.textarea.cursorOffset = 1
+
+    ctx.handler.handleKey(createEvent("x").event)
+    expect(ctx.textarea.plainText).toBe("acd")
+
+    ctx.handler.handleKey(createEvent("u").event)
+    expect(ctx.textarea.plainText).toBe("abcd")
+    expect(ctx.textarea.cursorOffset).toBe(1)
+
+    ctx.handler.handleKey(createEvent("r", { ctrl: true }).event)
+    expect(ctx.textarea.plainText).toBe("acd")
+    expect(ctx.textarea.cursorOffset).toBe(1)
+  })
+
+  test("insert session undoes in one step", () => {
+    const ctx = createHandler("ab")
+    ctx.textarea.cursorOffset = 1
+
+    ctx.handler.handleKey(createEvent("i").event)
+    expect(ctx.state.mode()).toBe("insert")
+    ctx.textarea.insertText("X")
+    ctx.textarea.insertText("Y")
+    ctx.handler.handleKey(createEvent("escape").event)
+
+    expect(ctx.textarea.plainText).toBe("aXYb")
+
+    ctx.handler.handleKey(createEvent("u").event)
+    expect(ctx.textarea.plainText).toBe("ab")
+    expect(ctx.textarea.cursorOffset).toBe(1)
+  })
+
+  test("replace session undoes in one step", () => {
+    const ctx = createHandler("abcd")
+    ctx.textarea.cursorOffset = 1
+
+    ctx.handler.handleKey(createEvent("R", { shift: true }).event)
+    expect(ctx.state.mode()).toBe("replace")
+    ctx.handler.handleKey(createEvent("X").event)
+    ctx.handler.handleKey(createEvent("Y").event)
+    ctx.handler.handleKey(createEvent("escape").event)
+
+    expect(ctx.textarea.plainText).toBe("aXYd")
+
+    ctx.handler.handleKey(createEvent("u").event)
+    expect(ctx.textarea.plainText).toBe("abcd")
+    expect(ctx.textarea.cursorOffset).toBe(1)
+  })
+
+  test("multiple undo steps work across insert sessions", () => {
+    const ctx = createHandler("")
+
+    ctx.handler.handleKey(createEvent("i").event)
+    ctx.textarea.insertText("hello")
+    ctx.handler.handleKey(createEvent("escape").event)
+
+    ctx.handler.handleKey(createEvent("i").event)
+    ctx.handler.handleKey(createEvent("escape").event)
+
+    ctx.handler.handleKey(createEvent("u").event)
+    expect(ctx.textarea.plainText).toBe("")
+
+    ctx.handler.handleKey(createEvent("r", { ctrl: true }).event)
+    expect(ctx.textarea.plainText).toBe("hello")
+
+    ctx.handler.handleKey(createEvent("i").event)
+    ctx.textarea.insertText("hello2")
+    ctx.handler.handleKey(createEvent("escape").event)
+
+    ctx.handler.handleKey(createEvent("u").event)
+    expect(ctx.textarea.plainText).toBe("hello")
+
+    ctx.handler.handleKey(createEvent("u").event)
+    expect(ctx.textarea.plainText).toBe("")
+  })
+
+  test("open line and typed text undo together", () => {
+    const ctx = createHandler("abc")
+    ctx.textarea.cursorOffset = 1
+
+    ctx.handler.handleKey(createEvent("o").event)
+    expect(ctx.state.mode()).toBe("insert")
+    ctx.textarea.insertText("hello")
+    ctx.handler.handleKey(createEvent("escape").event)
+
+    expect(ctx.textarea.plainText).toBe("abc\nhello")
+
+    ctx.handler.handleKey(createEvent("u").event)
+    expect(ctx.textarea.plainText).toBe("abc")
+    expect(ctx.textarea.cursorOffset).toBe(1)
+  })
+
+  test("undo restores structured snapshot data", () => {
+    const ctx = createHandler("abc", { data: [{ kind: "file", name: "a" }] })
+    ctx.textarea.cursorOffset = 3
+
+    ctx.handler.handleKey(createEvent("i").event)
+    ctx.textarea.insertText("x")
+    ctx.setMeta([{ kind: "file", name: "a" }, { kind: "file", name: "b" }])
+    ctx.handler.handleKey(createEvent("escape").event)
+
+    expect(ctx.textarea.plainText).toBe("abcx")
+    expect(ctx.meta()).toEqual([{ kind: "file", name: "a" }, { kind: "file", name: "b" }])
+
+    ctx.handler.handleKey(createEvent("u").event)
+    expect(ctx.textarea.plainText).toBe("abc")
+    expect(ctx.meta()).toEqual([{ kind: "file", name: "a" }])
+
+    ctx.handler.handleKey(createEvent("r", { ctrl: true }).event)
+    expect(ctx.textarea.plainText).toBe("abcx")
+    expect(ctx.meta()).toEqual([{ kind: "file", name: "a" }, { kind: "file", name: "b" }])
+  })
+
+  test("empty insert sessions do not create undo entries", () => {
+    const ctx = createHandler("hello")
+    ctx.textarea.cursorOffset = 5
+
+    ctx.handler.handleKey(createEvent("i").event)
+    ctx.handler.handleKey(createEvent("escape").event)
+
+    ctx.handler.handleKey(createEvent("u").event)
+    expect(ctx.textarea.plainText).toBe("hello")
+    expect(ctx.textarea.cursorOffset).toBe(5)
+  })
+
+  test("redo is cleared after a new edit", () => {
+    const ctx = createHandler("")
+
+    ctx.handler.handleKey(createEvent("i").event)
+    ctx.textarea.insertText("hello")
+    ctx.handler.handleKey(createEvent("escape").event)
+
+    ctx.handler.handleKey(createEvent("u").event)
+    expect(ctx.textarea.plainText).toBe("")
+
+    ctx.handler.handleKey(createEvent("i").event)
+    ctx.textarea.insertText("world")
+    ctx.handler.handleKey(createEvent("escape").event)
+    expect(ctx.textarea.plainText).toBe("world")
+
+    ctx.handler.handleKey(createEvent("r", { ctrl: true }).event)
+    expect(ctx.textarea.plainText).toBe("world")
+  })
+
+  test("cw groups delete and insert into one undo step", () => {
+    const ctx = createHandler("hello world")
+
+    ctx.handler.handleKey(createEvent("c").event)
+    ctx.handler.handleKey(createEvent("w").event)
+    expect(ctx.state.mode()).toBe("insert")
+    ctx.textarea.insertText("hi")
+    ctx.handler.handleKey(createEvent("escape").event)
+
+    expect(ctx.textarea.plainText).toBe("hiworld")
+
+    ctx.handler.handleKey(createEvent("u").event)
+    expect(ctx.textarea.plainText).toBe("hello world")
+    expect(ctx.textarea.cursorOffset).toBe(0)
+  })
+
+  test("cc groups clear and insert into one undo step", () => {
+    const ctx = createHandler("hello world")
+    ctx.textarea.cursorOffset = 3
+
+    ctx.handler.handleKey(createEvent("c").event)
+    ctx.handler.handleKey(createEvent("c").event)
+    expect(ctx.state.mode()).toBe("insert")
+    ctx.textarea.insertText("hi")
+    ctx.handler.handleKey(createEvent("escape").event)
+
+    expect(ctx.textarea.plainText).toBe("hi")
+
+    ctx.handler.handleKey(createEvent("u").event)
+    expect(ctx.textarea.plainText).toBe("hello world")
+    expect(ctx.textarea.cursorOffset).toBe(3)
+  })
+
+  test("S groups substitute line and insert into one undo step", () => {
+    const ctx = createHandler("hello world")
+    ctx.textarea.cursorOffset = 3
+
+    ctx.handler.handleKey(createEvent("S", { shift: true }).event)
+    expect(ctx.state.mode()).toBe("insert")
+    ctx.textarea.insertText("hi")
+    ctx.handler.handleKey(createEvent("escape").event)
+
+    expect(ctx.textarea.plainText).toBe("hi")
+
+    ctx.handler.handleKey(createEvent("u").event)
+    expect(ctx.textarea.plainText).toBe("hello world")
+    expect(ctx.textarea.cursorOffset).toBe(3)
+  })
+
+  test("p undo and redo work", () => {
+    const ctx = createHandler("abc")
+    ctx.textarea.cursorOffset = 1
+    ctx.state.setRegister({ text: "XY", linewise: false })
+
+    ctx.handler.handleKey(createEvent("p").event)
+    expect(ctx.textarea.plainText).toBe("abXYc")
+
+    ctx.handler.handleKey(createEvent("u").event)
+    expect(ctx.textarea.plainText).toBe("abc")
+
+    ctx.handler.handleKey(createEvent("r", { ctrl: true }).event)
+    expect(ctx.textarea.plainText).toBe("abXYc")
+  })
+
+  test("J undo and redo work", () => {
+    const ctx = createHandler("one\ntwo")
+
+    ctx.handler.handleKey(createEvent("J", { shift: true }).event)
+    expect(ctx.textarea.plainText).toBe("one two")
+
+    ctx.handler.handleKey(createEvent("u").event)
+    expect(ctx.textarea.plainText).toBe("one\ntwo")
+
+    ctx.handler.handleKey(createEvent("r", { ctrl: true }).event)
+    expect(ctx.textarea.plainText).toBe("one two")
+  })
+
+  test("wrapped logical line motions stay on same logical line", () => {
+    const ctx = createHandler("this is a very long logical line without a newline")
+    ctx.textarea.cursorOffset = 10
+
+    ctx.handler.handleKey(createEvent("j").event)
+    expect(ctx.textarea.cursorOffset).toBe(10)
+
+    ctx.handler.handleKey(createEvent("k").event)
+    expect(ctx.textarea.cursorOffset).toBe(10)
+
+    ctx.handler.handleKey(createEvent("$").event)
+    expect(ctx.textarea.cursorOffset).toBe(ctx.textarea.plainText.length - 1)
+  })
+})
+
 describe("vim scroll mapping", () => {
   test("vimScroll maps ctrl keys to actions", () => {
     expect(vimScroll(createEvent("e", { ctrl: true }).event)).toBe("line-down")
@@ -2530,12 +2837,15 @@ describe("copy mode cursor state", () => {
     const textarea = createTextarea("")
     const [enabled] = createSignal(true)
     const [mode, setMode] = createSignal<"normal" | "insert" | "replace" | "visual" | "visual-line" | "copy">("copy")
-    const [pending, setPending] = createSignal<"" | "c" | "d" | "g" | "f" | "F" | "t" | "T" | "y">("")
+    const [pending, setPending] = createSignal<"" | "c" | "d" | "g" | "z" | "f" | "F" | "t" | "T" | "y">("")
     const [lastFind, setLastFind] = createSignal<{ char: string; forward: boolean; till: boolean } | null>(null)
     const [register, setRegister] = createSignal<{ text: string; linewise: boolean } | null>(null)
     const [anchor, setAnchor] = createSignal<number | null>(null)
     const [replace, setReplace] = createSignal<number | null>(null)
     const [typed, setTyped] = createSignal(false)
+    const [undos, setUndos] = createSignal<Array<{ before: { text: string; cursor: number }; after: { text: string; cursor: number } }>>([])
+    const [redos, setRedos] = createSignal<Array<{ text: string; cursor: number }>>([])
+    const [editState, setEditState] = createSignal<{ text: string; cursor: number } | null>(null)
 
     let idx = opts?.idx ?? 0
     let col = opts?.col ?? lines[0]!.min
@@ -2593,11 +2903,57 @@ describe("copy mode cursor state", () => {
       setReplace,
       typed,
       setTyped,
+      beginEdit(snapshot) {
+        setEditState(snapshot)
+      },
+      commitEdit(snapshot) {
+        const start = editState()
+        setEditState(null)
+        if (!start) return
+        if (start.text === snapshot.text && start.cursor === snapshot.cursor) return
+        setUndos((list) => [...list, { before: start, after: snapshot }])
+        setRedos([])
+      },
+      cancelEdit() {
+        setEditState(null)
+      },
+      push(before, after) {
+        setEditState(null)
+        if (before.text === after.text && before.cursor === after.cursor) return
+        setUndos((list) => [...list, { before, after }])
+        setRedos([])
+      },
+      undo(snapshot) {
+        const item = undos()[undos().length - 1]
+        if (!item) return
+        setUndos((list) => list.slice(0, -1))
+        setRedos((list) => [...list, snapshot])
+        setEditState(null)
+        return item.before
+      },
+      redo(snapshot) {
+        const item = redos()[redos().length - 1]
+        if (!item) return
+        setRedos((list) => list.slice(0, -1))
+        setUndos((list) => [...list, { before: snapshot, after: item }])
+        setEditState(null)
+        return item
+      },
+      resetHistory() {
+        setUndos([])
+        setRedos([])
+        setEditState(null)
+      },
+      canUndo: () => undos().length > 0,
+      canRedo: () => redos().length > 0,
       reset() {
         clearPending()
         setAnchor(null)
         setReplace(null)
         setTyped(false)
+        setUndos([])
+        setRedos([])
+        setEditState(null)
         setMode("insert")
       },
       isInsert: () => mode() === "insert",

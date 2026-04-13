@@ -23,7 +23,7 @@ import { useRoute } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
 import { useEvent } from "@tui/context/event"
 import { MessageID, PartID } from "@/session/schema"
-import { createStore, produce } from "solid-js/store"
+import { createStore, produce, unwrap } from "solid-js/store"
 import { useKeybind } from "@tui/context/keybind"
 import { usePromptHistory, type PromptInfo } from "./history"
 import { assign } from "./part"
@@ -414,6 +414,18 @@ export function Prompt(props: PromptProps) {
       props.copy?.scroll(action)
     },
     autocomplete: () => autocomplete.visible,
+    history: () => true,
+    snapshot: promptSnapshot,
+    restore(next) {
+      input.setText(next.text)
+      input.cursorOffset = Math.max(0, Math.min(next.cursor, next.text.length))
+      const parts = Array.isArray(next.data) ? (next.data as PromptInfo["parts"]) : []
+      setStore("prompt", {
+        input: next.text,
+        parts,
+      })
+      restoreExtmarksFromParts(parts)
+    },
     flash(span) {
       flash++
       const id = flash
@@ -480,6 +492,7 @@ export function Prompt(props: PromptProps) {
         onSelect: (dialog) => {
           input.extmarks.clear()
           input.clear()
+          vimState.resetHistory()
           dialog.clear()
         },
       },
@@ -642,6 +655,7 @@ export function Prompt(props: PromptProps) {
           })
           restoreExtmarksFromParts(updatedNonTextParts)
           input.cursorOffset = Bun.stringWidth(content)
+          vimState.resetHistory()
         },
       },
       {
@@ -680,6 +694,7 @@ export function Prompt(props: PromptProps) {
                   parts: [],
                 })
                 input.gotoBufferEnd()
+                vimState.resetHistory()
               }}
             />
           ))
@@ -706,6 +721,7 @@ export function Prompt(props: PromptProps) {
       setStore("prompt", prompt)
       restoreExtmarksFromParts(prompt.parts)
       input.gotoBufferEnd()
+      vimState.resetHistory()
     },
     reset() {
       input.clear()
@@ -715,6 +731,7 @@ export function Prompt(props: PromptProps) {
         parts: [],
       })
       setStore("extmarkToPartIndex", new Map())
+      vimState.resetHistory()
     },
     submit() {
       submit()
@@ -853,6 +870,7 @@ export function Prompt(props: PromptProps) {
         input.clear()
         setStore("prompt", { input: "", parts: [] })
         setStore("extmarkToPartIndex", new Map())
+        vimState.resetHistory()
         dialog.clear()
       },
     },
@@ -868,6 +886,7 @@ export function Prompt(props: PromptProps) {
           setStore("prompt", { input: entry.input, parts: entry.parts })
           restoreExtmarksFromParts(entry.parts)
           input.gotoBufferEnd()
+          vimState.resetHistory()
         }
         dialog.clear()
       },
@@ -885,6 +904,7 @@ export function Prompt(props: PromptProps) {
               setStore("prompt", { input: entry.input, parts: entry.parts })
               restoreExtmarksFromParts(entry.parts)
               input.gotoBufferEnd()
+              vimState.resetHistory()
             }}
           />
         ))
@@ -1032,6 +1052,7 @@ export function Prompt(props: PromptProps) {
       parts: [],
     })
     setStore("extmarkToPartIndex", new Map())
+    vimState.resetHistory()
     props.onSubmit?.()
 
     // temporary hack to make sure the message is sent
@@ -1045,6 +1066,15 @@ export function Prompt(props: PromptProps) {
     input.clear()
   }
   const exit = useExit()
+
+  function promptSnapshot() {
+    syncExtmarksWithPromptParts()
+    return {
+      text: input.plainText,
+      cursor: input.cursorOffset,
+      data: structuredClone(unwrap(store.prompt.parts)),
+    }
+  }
 
   function pasteText(text: string, virtualText: string) {
     const currentOffset = input.visualCursor.offset
@@ -1278,6 +1308,7 @@ export function Prompt(props: PromptProps) {
                       parts: [],
                     })
                     setStore("extmarkToPartIndex", new Map())
+                    vimState.resetHistory()
                     return
                   }
                   const isVimScrollOverride =
@@ -1322,6 +1353,7 @@ export function Prompt(props: PromptProps) {
                         setStore("prompt", item)
                         setStore("mode", item.mode ?? "normal")
                         restoreExtmarksFromParts(item.parts)
+                        vimState.resetHistory()
                         e.preventDefault()
                         if (direction === -1) input.cursorOffset = 0
                         if (direction === 1) input.cursorOffset = input.plainText.length

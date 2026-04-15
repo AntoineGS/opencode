@@ -2,7 +2,7 @@
 
 # OpenCode Vim
 
-[![npm version](https://img.shields.io/npm/v/@leohenon/ocv?style=flat-square&logo=npm&logoColor=white)](https://www.npmjs.com/package/@leohenon/ocv) [![npm downloads](https://img.shields.io/npm/dm/@leohenon/ocv?style=flat-square&logo=npm&logoColor=white&color=64748b)](https://www.npmjs.com/package/@leohenon/ocv) [![CI](https://img.shields.io/github/actions/workflow/status/leohenon/opencode-vim/ci.yml?branch=ocv&style=flat-square&logo=github&logoColor=white&label=CI&color=3f8f4d)](https://github.com/leohenon/opencode-vim/actions/workflows/ci.yml) [![Last commit](https://img.shields.io/github/last-commit/leohenon/opencode-vim/ocv?style=flat-square&logo=git&logoColor=white&color=7fa6a3)](https://github.com/leohenon/opencode-vim/commits/ocv) [![Bun](https://img.shields.io/badge/runtime-Bun-f9f1e1?style=flat-square&logo=bun&logoColor=white)](https://bun.sh)
+[![npm version](https://img.shields.io/npm/v/@leohenon/ocv?style=flat-square&logo=npm&logoColor=white)](https://www.npmjs.com/package/@leohenon/ocv) [![CI](https://img.shields.io/github/actions/workflow/status/leohenon/opencode-vim/ci.yml?branch=ocv&style=flat-square&logo=github&logoColor=white&label=CI&color=3f8f4d)](https://github.com/leohenon/opencode-vim/actions/workflows/ci.yml) [![Last commit](https://img.shields.io/github/last-commit/leohenon/opencode-vim/ocv?style=flat-square&logo=git&logoColor=white&color=7fa6a3)](https://github.com/leohenon/opencode-vim/commits/ocv) [![Bun](https://img.shields.io/badge/runtime-Bun-f9f1e1?style=flat-square&logo=bun&logoColor=white)](https://bun.sh)
 
 opencode fork with vim mode. Syncs with upstream releases.
 
@@ -50,10 +50,23 @@ ocv update
 
 ### Vim motions
 
+**Movement**
+
 `h` `j` `k` `l` `w` `b` `e` `W` `B` `E` `0` `^` `_` `$` `gg` `G`
-`i` `I` `a` `A` `o` `O` `R` `x` `dd` `dw` `cc` `cw` `S` `J` `yy` `yw` `p` `P` `v` `V`
 `f` `F` `t` `T` `;` `,`
 `Ctrl+e` `Ctrl+y` `Ctrl+d` `Ctrl+u` `Ctrl+f` `Ctrl+b`
+
+**Editing**
+
+`i` `I` `a` `A` `o` `O` `R` `x` `~` `dd` `dw` `cc` `cw` `S` `J`
+
+**Yank / put / undo**
+
+`yy` `yw` `p` `P` `u` `Ctrl+r`
+
+**Visual**
+
+`v` `V`
 
 > [!TIP]
 > Toggle via command palette (`Ctrl+p` -> `Toggle vim mode`).
@@ -76,6 +89,8 @@ Works similarly to tmux copy mode within opencode tui.
 - `y` yanks to the vim register.
 - `Enter` copies to the system clipboard.
 - `Escape` exits visual mode, `q` exits copy mode.
+- `z` `zt` `zz` `zb` adjust copy-mode scroll positioning.
+- `H` / `M` / `L` jump to the top / middle / bottom of the viewport.
 
 > [!TIP]
 > Configure the entry key with `keybinds.copy_mode` in your config if you want something other than `<leader>v`.
@@ -102,7 +117,6 @@ When the prompt grows past the visible area, a scrollbar appears automatically.
 
 > [!NOTE]
 > When typing `gg` / `G` focus the prompt input.
-> `H` / `M` / `L` are supported for viewport-relative navigation.
 
 > [!WARNING]
 > Setting `prompt_max_height` above `40` is not recommended.

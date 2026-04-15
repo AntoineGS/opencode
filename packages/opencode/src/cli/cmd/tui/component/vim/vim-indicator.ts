@@ -14,7 +14,7 @@ export function useVimIndicator(input: {
     if (input.state.isCopy()) {
       if (input.copyVisual?.() === "char") return "-- V-COPY --"
       if (input.copyVisual?.() === "line") return "-- VL-COPY --"
-      return "-- COPY --"
+      return "COPY"
     }
     if (input.state.isInsert()) return "-- INSERT --"
     if (input.state.isReplace()) return "-- REPLACE --"

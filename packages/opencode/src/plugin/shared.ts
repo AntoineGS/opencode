@@ -182,7 +182,8 @@ export async function resolvePathPluginTarget(spec: string) {
   }
 
   if (await Filesystem.exists(path.join(file, "package.json"))) {
-    return pathToFileURL(file).href
+    const pkg = await readPluginPackage(file)
+    return resolvePackageEntrypoint(spec, "server", pkg) ?? pathToFileURL(file).href
   }
 
   const index = await resolveDirectoryIndex(file)

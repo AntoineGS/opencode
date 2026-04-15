@@ -8,6 +8,7 @@ import type { AssistantMessage, Session } from "@opencode-ai/sdk/v2"
 import { useCommandDialog } from "@tui/component/dialog-command"
 import { useKeybind } from "../../context/keybind"
 import { useKV } from "../../context/kv"
+import { useProject } from "../../context/project"
 import { Flag } from "@/flag/flag"
 import { useTerminalDimensions } from "@opentui/solid"
 
@@ -47,6 +48,7 @@ export function Header() {
   const sync = useSync()
   const session = createMemo(() => sync.session.get(route.sessionID)!)
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
+  const project = useProject()
 
   const cost = createMemo(() => {
     const total = pipe(
@@ -75,7 +77,7 @@ export function Header() {
   const workspace = createMemo(() => {
     const id = session()?.workspaceID
     if (!id) return "Workspace local"
-    const info = sync.workspace.get(id)
+    const info = project.workspace.get(id)
     if (!info) return `Workspace ${id}`
     return `Workspace ${id} (${info.type})`
   })

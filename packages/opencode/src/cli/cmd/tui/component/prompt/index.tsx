@@ -10,7 +10,17 @@ import {
   dim,
   fg,
 } from "@opentui/core"
-import { createEffect, createMemo, onMount, createSignal, onCleanup, on, Show, Switch, Match } from "solid-js"
+import {
+  createEffect,
+  createMemo,
+  onMount,
+  createSignal,
+  onCleanup,
+  on,
+  Show,
+  Switch,
+  Match,
+} from "solid-js"
 import "opentui-spinner/solid"
 import path from "path"
 import { fileURLToPath } from "url"
@@ -47,6 +57,7 @@ import { DialogProvider as DialogProviderConnect } from "../dialog-provider"
 import { DialogAlert } from "../../ui/dialog-alert"
 import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
+import { createFadeIn } from "../../util/signal"
 import { useTextareaKeybindings } from "../textarea-keybindings"
 import { DialogSkill } from "../dialog-skill"
 import { useArgs } from "@tui/context/args"
@@ -119,6 +130,10 @@ function randomIndex(count: number) {
   return Math.floor(Math.random() * count)
 }
 
+function fadeColor(color: RGBA, alpha: number) {
+  return RGBA.fromValues(color.r, color.g, color.b, color.a * alpha)
+}
+
 let stashed: { prompt: PromptInfo; cursor: number } | undefined
 
 export function Prompt(props: PromptProps) {
@@ -144,6 +159,7 @@ export function Prompt(props: PromptProps) {
   const kv = useKV()
   const vimEnabled = useVimEnabled()
   const mini = createMemo(() => kv.get("ui_minimal", false))
+  const animationsEnabled = createMemo(() => kv.get("animations_enabled", true))
   const list = createMemo(() => props.placeholders?.normal ?? PLACEHOLDERS)
   const shell = createMemo(() => props.placeholders?.shell ?? SHELL_PLACEHOLDERS)
   const [auto, setAuto] = createSignal<AutocompleteRef>()
@@ -1217,6 +1233,13 @@ export function Prompt(props: PromptProps) {
     return !!current
   })
 
+  const agentMetaAlpha = createFadeIn(() => !!local.agent.current(), animationsEnabled)
+  const modelMetaAlpha = createFadeIn(() => !!local.agent.current() && store.mode === "normal", animationsEnabled)
+  const variantMetaAlpha = createFadeIn(
+    () => !!local.agent.current() && store.mode === "normal" && showVariant(),
+    animationsEnabled,
+  )
+
   const placeholderText = createMemo(() => {
     if (props.showPlaceholder === false) return undefined
     if (mini()) return undefined
@@ -1559,17 +1582,24 @@ export function Prompt(props: PromptProps) {
                 <Show when={local.agent.current()} fallback={<box height={1} />}>
                   {(agent) => (
                     <>
-                      <text fg={highlight()}>{store.mode === "shell" ? "Shell" : Locale.titlecase(agent().name)} </text>
+                      <text fg={fadeColor(highlight(), agentMetaAlpha())}>
+                        {store.mode === "shell" ? "Shell" : Locale.titlecase(agent().name)}{" "}
+                      </text>
                       <Show when={store.mode === "normal"}>
                         <box flexDirection="row" gap={1}>
-                          <text flexShrink={0} fg={dimmed() ? theme.textMuted : theme.text}>
+                          <text
+                            flexShrink={0}
+                            fg={fadeColor(dimmed() ? theme.textMuted : theme.text, modelMetaAlpha())}
+                          >
                             {local.model.parsed().model}
                           </text>
-                          <text fg={theme.textMuted}>{currentProviderLabel()}</text>
+                          <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>{currentProviderLabel()}</text>
                           <Show when={showVariant()}>
-                            <text fg={theme.textMuted}>·</text>
+                            <text fg={fadeColor(theme.textMuted, variantMetaAlpha())}>·</text>
                             <text>
-                              <span style={{ fg: theme.warning, bold: true }}>{local.model.variant.current()}</span>
+                              <span style={{ fg: fadeColor(theme.warning, variantMetaAlpha()), bold: true }}>
+                                {local.model.variant.current()}
+                              </span>
                             </text>
                           </Show>
                         </box>

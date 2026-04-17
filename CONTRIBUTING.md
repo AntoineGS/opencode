@@ -17,3 +17,8 @@ bun install
 bun test test/cli/tui/vim-motions.test.ts  # from packages/opencode
 
 ```
+
+Running Locally
+```bash
+bun dev .
+```

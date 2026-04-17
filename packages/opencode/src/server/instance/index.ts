@@ -1,12 +1,12 @@
 import { describeRoute, resolver, validator } from "hono-openapi"
 import { Hono } from "hono"
 import type { UpgradeWebSocket } from "hono/ws"
-import { Effect } from "effect"
+import { Context, Effect } from "effect"
 import z from "zod"
 import { Format } from "../../format"
 import { TuiRoutes } from "./tui"
 import { Instance } from "../../project/instance"
-import { Vcs } from "../../project/vcs"
+import { Vcs } from "../../project"
 import { Agent } from "../../agent/agent"
 import { Skill } from "../../skill"
 import { Global } from "../../global"
@@ -14,6 +14,8 @@ import { LSP } from "../../lsp"
 import { Command } from "../../command"
 import { QuestionRoutes } from "./question"
 import { PermissionRoutes } from "./permission"
+import { Flag } from "@/flag/flag"
+import { ExperimentalHttpApiServer } from "./httpapi/server"
 import { ProjectRoutes } from "./project"
 import { SessionRoutes } from "./session"
 import { PtyRoutes } from "./pty"
@@ -27,8 +29,8 @@ import { SyncRoutes } from "./sync"
 import { WorkspaceRouterMiddleware } from "./middleware"
 import { AppRuntime } from "@/effect/app-runtime"
 
-export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono =>
-  new Hono()
+export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
+  const app = new Hono()
     .use(WorkspaceRouterMiddleware(upgrade))
     .route("/project", ProjectRoutes())
     .route("/pty", PtyRoutes(upgrade))
@@ -36,6 +38,23 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono =>
     .route("/experimental", ExperimentalRoutes())
     .route("/session", SessionRoutes())
     .route("/permission", PermissionRoutes())
+
+  if (Flag.OPENCODE_EXPERIMENTAL_HTTPAPI) {
+    const handler = ExperimentalHttpApiServer.webHandler().handler
+    const context = Context.empty() as Context.Context<unknown>
+    app.get("/question", (c) => handler(c.req.raw, context))
+    app.post("/question/:requestID/reply", (c) => handler(c.req.raw, context))
+    app.post("/question/:requestID/reject", (c) => handler(c.req.raw, context))
+    app.get("/permission", (c) => handler(c.req.raw, context))
+    app.post("/permission/:requestID/reply", (c) => handler(c.req.raw, context))
+    app.get("/config/providers", (c) => handler(c.req.raw, context))
+    app.get("/provider", (c) => handler(c.req.raw, context))
+    app.get("/provider/auth", (c) => handler(c.req.raw, context))
+    app.post("/provider/:providerID/oauth/authorize", (c) => handler(c.req.raw, context))
+    app.post("/provider/:providerID/oauth/callback", (c) => handler(c.req.raw, context))
+  }
+
+  return app
     .route("/question", QuestionRoutes())
     .route("/provider", ProviderRoutes())
     .route("/sync", SyncRoutes())
@@ -283,3 +302,4 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono =>
         return c.json(await AppRuntime.runPromise(Format.Service.use((svc) => svc.status())))
       },
     )
+}

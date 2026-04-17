@@ -14,10 +14,10 @@ import { createEffect, createMemo, onMount, createSignal, onCleanup, on, Show, S
 import "opentui-spinner/solid"
 import path from "path"
 import { fileURLToPath } from "url"
-import { Filesystem } from "@/util/filesystem"
+import { Filesystem } from "@/util"
 import { useLocal } from "@tui/context/local"
 import { useTheme } from "@tui/context/theme"
-import { EmptyBorder } from "@tui/component/border"
+import { EmptyBorder, SplitBorder } from "@tui/component/border"
 import { useSDK } from "@tui/context/sdk"
 import { useRoute } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
@@ -32,14 +32,14 @@ import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useCommandDialog } from "../dialog-command"
 import { useRenderer, type JSX } from "@opentui/solid"
-import { Editor } from "@tui/util/editor"
+import * as Editor from "@tui/util/editor"
 import { useExit } from "../../context/exit"
 import { useTuiConfig } from "../../context/tui-config"
-import { Clipboard } from "../../util/clipboard"
+import * as Clipboard from "../../util/clipboard"
 import type { AssistantMessage, FilePart, UserMessage } from "@opencode-ai/sdk/v2"
 import { TuiEvent } from "../../event"
 import { iife } from "@/util/iife"
-import { Locale } from "@/util/locale"
+import { Locale } from "@/util"
 import { formatDuration } from "@/util/format"
 import { createColors, createFrames } from "../../ui/spinner.ts"
 import { useDialog } from "@tui/ui/dialog"
@@ -49,6 +49,7 @@ import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { useTextareaKeybindings } from "../textarea-keybindings"
 import { DialogSkill } from "../dialog-skill"
+import { useArgs } from "@tui/context/args"
 import { useVimEnabled } from "../vim"
 import { createVimState, type VimMode } from "../vim/vim-state"
 import { createVimHandler } from "../vim/vim-handler"
@@ -108,6 +109,10 @@ const PLACEHOLDERS = ["Fix a TODO in the codebase", "What is the tech stack of t
 const SHELL_PLACEHOLDERS = ["ls -la", "git status", "pwd"]
 let lastVimMode: VimMode = "insert"
 const EMPTY_RENDER = "__vim_empty_render"
+const money = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+})
 
 function randomIndex(count: number) {
   if (count <= 0) return 0
@@ -122,6 +127,7 @@ export function Prompt(props: PromptProps) {
   const keybind = useKeybind()
   const cfg = useTuiConfig()
   const local = useLocal()
+  const args = useArgs()
   const sdk = useSDK()
   const route = useRoute()
   const sync = useSync()
@@ -276,6 +282,25 @@ export function Prompt(props: PromptProps) {
     const messages = sync.data.message[props.sessionID]
     if (!messages) return undefined
     return messages.findLast((m): m is UserMessage => m.role === "user")
+  })
+
+  const usage = createMemo(() => {
+    if (!props.sessionID) return
+    const msg = sync.data.message[props.sessionID] ?? []
+    const last = msg.findLast((item): item is AssistantMessage => item.role === "assistant" && item.tokens.output > 0)
+    if (!last) return
+
+    const tokens =
+      last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
+    if (tokens <= 0) return
+
+    const model = sync.data.provider.find((item) => item.id === last.providerID)?.models[last.modelID]
+    const pct = model?.limit.context ? `${Math.round((tokens / model.limit.context) * 100)}%` : undefined
+    const cost = msg.reduce((sum, item) => sum + (item.role === "assistant" ? item.cost : 0), 0)
+    return {
+      context: pct ? `${Locale.number(tokens)} (${pct})` : Locale.number(tokens),
+      cost: cost > 0 ? money.format(cost) : undefined,
+    }
   })
 
   const [store, setStore] = createStore<{
@@ -473,7 +498,8 @@ export function Prompt(props: PromptProps) {
       // Only set agent if it's a primary agent (not a subagent)
       const isPrimaryAgent = local.agent.list().some((x) => x.name === msg.agent)
       if (msg.agent && isPrimaryAgent) {
-        local.agent.set(msg.agent)
+        // Keep command line --agent if specified.
+        if (!args.agent) local.agent.set(msg.agent)
         if (msg.model) {
           local.model.set(msg.model)
           local.model.variant.set(msg.model.variant)
@@ -503,7 +529,7 @@ export function Prompt(props: PromptProps) {
         hidden: true,
         onSelect: (dialog) => {
           if (!input.focused) return
-          submit()
+          void submit()
           dialog.clear()
         },
       },
@@ -562,7 +588,7 @@ export function Prompt(props: PromptProps) {
           }, 5000)
 
           if (store.interrupt >= 2) {
-            sdk.client.session.abort({
+            void sdk.client.session.abort({
               sessionID: props.sessionID,
             })
             setStore("interrupt", 0)
@@ -734,7 +760,7 @@ export function Prompt(props: PromptProps) {
       vimState.resetHistory()
     },
     submit() {
-      submit()
+      void submit()
     },
   }
 
@@ -923,22 +949,22 @@ export function Prompt(props: PromptProps) {
     if (props.disabled) return
     if (autocomplete?.visible) return
     if (!store.prompt.input) return
+    const agent = local.agent.current()
+    if (!agent) return
     const trimmed = store.prompt.input.trim()
     if (trimmed === "exit" || trimmed === "quit" || trimmed === ":q") {
-      exit()
+      void exit()
       return
     }
     const selectedModel = local.model.current()
     if (!selectedModel) {
-      promptModelWarning()
+      void promptModelWarning()
       return
     }
 
     let sessionID = props.sessionID
     if (sessionID == null) {
-      const res = await sdk.client.session.create({
-        workspaceID: props.workspaceID,
-      })
+      const res = await sdk.client.session.create({ workspace: props.workspaceID })
 
       if (res.error) {
         console.log("Creating a session failed:", res.error)
@@ -981,9 +1007,9 @@ export function Prompt(props: PromptProps) {
     const variant = local.model.variant.current()
 
     if (store.mode === "shell") {
-      sdk.client.session.shell({
+      void sdk.client.session.shell({
         sessionID,
-        agent: local.agent.current().name,
+        agent: agent.name,
         model: {
           providerID: selectedModel.providerID,
           modelID: selectedModel.modelID,
@@ -1006,11 +1032,11 @@ export function Prompt(props: PromptProps) {
       const restOfInput = firstLineEnd === -1 ? "" : inputText.slice(firstLineEnd + 1)
       const args = firstLineArgs.join(" ") + (restOfInput ? "\n" + restOfInput : "")
 
-      sdk.client.session.command({
+      void sdk.client.session.command({
         sessionID,
         command: command.slice(1),
         arguments: args,
-        agent: local.agent.current().name,
+        agent: agent.name,
         model: `${selectedModel.providerID}/${selectedModel.modelID}`,
         messageID,
         variant,
@@ -1027,7 +1053,7 @@ export function Prompt(props: PromptProps) {
           sessionID,
           ...selectedModel,
           messageID,
-          agent: local.agent.current().name,
+          agent: agent.name,
           model: selectedModel,
           variant,
           parts: [
@@ -1162,7 +1188,9 @@ export function Prompt(props: PromptProps) {
   const highlight = createMemo(() => {
     if (dimmed()) return theme.border
     if (store.mode === "shell") return theme.primary
-    return local.agent.color(local.agent.current().name)
+    const agent = local.agent.current()
+    if (!agent) return theme.border
+    return local.agent.color(agent.name)
   })
 
   const showVariant = createMemo(() => {
@@ -1186,7 +1214,8 @@ export function Prompt(props: PromptProps) {
   })
 
   const spinnerDef = createMemo(() => {
-    const color = local.agent.color(local.agent.current().name)
+    const agent = local.agent.current()
+    const color = agent ? local.agent.color(agent.name) : theme.border
     return {
       frames: createFrames({
         color,
@@ -1235,8 +1264,7 @@ export function Prompt(props: PromptProps) {
           border={["left"]}
           borderColor={highlight()}
           customBorderChars={{
-            ...EmptyBorder,
-            vertical: "┃",
+            ...SplitBorder.customBorderChars,
             bottomLeft: "╹",
           }}
         >
@@ -1387,6 +1415,10 @@ export function Prompt(props: PromptProps) {
                     return
                   }
 
+                  // Once we cross an async boundary below, the terminal may perform its
+                  // default paste unless we suppress it first and handle insertion ourselves.
+                  event.preventDefault()
+
                   const filepath = iife(() => {
                     const raw = pastedContent.replace(/^['"]+|['"]+$/g, "")
                     if (raw.startsWith("file://")) {
@@ -1400,11 +1432,9 @@ export function Prompt(props: PromptProps) {
                   const isUrl = /^(https?):\/\//.test(filepath)
                   if (!isUrl) {
                     try {
-                      const mime = Filesystem.mimeType(filepath)
+                      const mime = await Filesystem.mimeType(filepath)
                       const filename = path.basename(filepath)
-                      // Handle SVG as raw text content, not as base64 image
                       if (mime === "image/svg+xml") {
-                        event.preventDefault()
                         const content = await Filesystem.readText(filepath).catch(() => {})
                         if (content) {
                           pasteText(content, `[SVG: ${filename ?? "image"}]`)
@@ -1412,7 +1442,6 @@ export function Prompt(props: PromptProps) {
                         }
                       }
                       if (mime.startsWith("image/") || mime === "application/pdf") {
-                        event.preventDefault()
                         const content = await Filesystem.readArrayBuffer(filepath)
                           .then((buffer) => Buffer.from(buffer).toString("base64"))
                           .catch(() => {})
@@ -1434,14 +1463,13 @@ export function Prompt(props: PromptProps) {
                     (lineCount >= 3 || pastedContent.length > 150) &&
                     !sync.data.config.experimental?.disable_paste_summary
                   ) {
-                    event.preventDefault()
                     pasteText(pastedContent, `[Pasted ~${lineCount} lines]`)
                     return
                   }
 
-                  // Force layout update and render for the pasted content
+                  input.insertText(normalizedText)
+
                   setTimeout(() => {
-                    // setTimeout is a workaround and needs to be addressed properly
                     if (!input || input.isDestroyed) return
                     input.getLayoutNode().markDirty()
                     renderer.requestRender()
@@ -1477,7 +1505,6 @@ export function Prompt(props: PromptProps) {
                   }
                   props.ref?.(ref)
                   setTimeout(() => {
-                    // setTimeout is a workaround and needs to be addressed properly
                     if (!input || input.isDestroyed) return
                     input.cursorColor = theme.text
                     syncScrollbar()
@@ -1512,22 +1539,26 @@ export function Prompt(props: PromptProps) {
             </box>
             <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1} justifyContent="space-between">
               <box flexDirection="row" gap={1}>
-                <text fg={highlight()}>
-                  {store.mode === "shell" ? "Shell" : Locale.titlecase(local.agent.current().name)}{" "}
-                </text>
-                <Show when={store.mode === "normal"}>
-                  <box flexDirection="row" gap={1}>
-                    <text flexShrink={0} fg={dimmed() ? theme.textMuted : theme.text}>
-                      {local.model.parsed().model}
-                    </text>
-                    <text fg={theme.textMuted}>{currentProviderLabel()}</text>
-                    <Show when={showVariant()}>
-                      <text fg={theme.textMuted}>·</text>
-                      <text>
-                        <span style={{ fg: theme.warning, bold: true }}>{local.model.variant.current()}</span>
-                      </text>
-                    </Show>
-                  </box>
+                <Show when={local.agent.current()} fallback={<box height={1} />}>
+                  {(agent) => (
+                    <>
+                      <text fg={highlight()}>{store.mode === "shell" ? "Shell" : Locale.titlecase(agent().name)} </text>
+                      <Show when={store.mode === "normal"}>
+                        <box flexDirection="row" gap={1}>
+                          <text flexShrink={0} fg={dimmed() ? theme.textMuted : theme.text}>
+                            {local.model.parsed().model}
+                          </text>
+                          <text fg={theme.textMuted}>{currentProviderLabel()}</text>
+                          <Show when={showVariant()}>
+                            <text fg={theme.textMuted}>·</text>
+                            <text>
+                              <span style={{ fg: theme.warning, bold: true }}>{local.model.variant.current()}</span>
+                            </text>
+                          </Show>
+                        </box>
+                      </Show>
+                    </>
+                  )}
                 </Show>
               </box>
               <Show when={hasRightContent()}>
@@ -1587,7 +1618,7 @@ export function Prompt(props: PromptProps) {
                         vimState.pending()
                           ? theme.textMuted
                           : indicator() === "INSERT" || indicator() === "-- INSERT --"
-                            ? local.agent.color(local.agent.current().name)
+                            ? local.agent.color(local.agent.current()?.name ?? "build")
                             : indicator() === "VISUAL" ||
                                 indicator() === "-- VISUAL --" ||
                                 indicator() === "V-LINE" ||
@@ -1668,7 +1699,7 @@ export function Prompt(props: PromptProps) {
                       const r = retry()
                       if (!r) return
                       if (isTruncated()) {
-                        DialogAlert.show(dialog, "Retry Error", r.message)
+                        void DialogAlert.show(dialog, "Retry Error", r.message)
                       }
                     }
 
@@ -1709,9 +1740,20 @@ export function Prompt(props: PromptProps) {
                       {keybind.print("variant_cycle")} <span style={{ fg: theme.textMuted }}>variants</span>
                     </text>
                   </Show>
-                  <text fg={theme.text}>
-                    {keybind.print("agent_cycle")} <span style={{ fg: theme.textMuted }}>agents</span>
-                  </text>
+                  <Switch>
+                    <Match when={usage()}>
+                      {(item) => (
+                        <text fg={theme.textMuted} wrapMode="none">
+                          {[item().context, item().cost].filter(Boolean).join(" · ")}
+                        </text>
+                      )}
+                    </Match>
+                    <Match when={true}>
+                      <text fg={theme.text}>
+                        {keybind.print("agent_cycle")} <span style={{ fg: theme.textMuted }}>agents</span>
+                      </text>
+                    </Match>
+                  </Switch>
                   <text fg={theme.text}>
                     {keybind.print("command_list")} <span style={{ fg: theme.textMuted }}>commands</span>
                   </text>

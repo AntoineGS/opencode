@@ -2,7 +2,7 @@ import { createEffect, createMemo, createSignal, type Accessor } from "solid-js"
 import type { ScrollBoxRenderable } from "@opentui/core"
 import type { Part } from "@opencode-ai/sdk/v2"
 import { copyWordNext, copyWordPrev, firstNonWhitespace } from "@/cli/cmd/tui/component/vim/vim-motions"
-import { Clipboard } from "../../util/clipboard"
+import * as Clipboard from "../../util/clipboard"
 
 export type CopyRow = {
   key: string

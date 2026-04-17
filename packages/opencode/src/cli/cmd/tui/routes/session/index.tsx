@@ -33,18 +33,19 @@ import type {
   ReasoningPart,
 } from "@opencode-ai/sdk/v2"
 import { useLocal } from "@tui/context/local"
-import { Locale } from "@/util/locale"
-import type { Tool } from "@/tool/tool"
+import { Locale } from "@/util"
+import type { Tool } from "@/tool"
 import type { ReadTool } from "@/tool/read"
 import type { WriteTool } from "@/tool/write"
 import { BashTool } from "@/tool/bash"
 import type { GlobTool } from "@/tool/glob"
 import { TodoWriteTool } from "@/tool/todo"
 import type { GrepTool } from "@/tool/grep"
-import type { ListTool } from "@/tool/ls"
 import type { EditTool } from "@/tool/edit"
 import type { ApplyPatchTool } from "@/tool/apply_patch"
 import type { WebFetchTool } from "@/tool/webfetch"
+import type { CodeSearchTool } from "@/tool/codesearch"
+import type { WebSearchTool } from "@/tool/websearch"
 import type { TaskTool } from "@/tool/task"
 import type { QuestionTool } from "@/tool/question"
 import type { SkillTool } from "@/tool/skill"
@@ -53,7 +54,6 @@ import { useSDK } from "@tui/context/sdk"
 import { useCommandDialog } from "@tui/component/dialog-command"
 import type { DialogContext } from "@tui/ui/dialog"
 import { useKeybind } from "@tui/context/keybind"
-import { parsePatch } from "diff"
 import { useDialog } from "../../ui/dialog"
 import { TodoItem } from "../../component/todo-item"
 import { DialogMessage } from "./dialog-message"
@@ -68,14 +68,14 @@ import { SubagentFooter } from "./subagent-footer.tsx"
 import { Flag } from "@/flag/flag"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import parsers from "../../../../../../parsers-config.ts"
-import { Clipboard } from "../../util/clipboard"
+import * as Clipboard from "../../util/clipboard"
 import { Toast, useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv.tsx"
-import { Editor } from "../../util/editor"
+import * as Editor from "../../util/editor"
 import stripAnsi from "strip-ansi"
 import { usePromptRef } from "../../context/prompt"
 import { useExit } from "../../context/exit"
-import { Filesystem } from "@/util/filesystem"
+import { Filesystem } from "@/util"
 import { Global } from "@/global"
 import { PermissionPrompt } from "./permission"
 import { QuestionPrompt } from "./question"
@@ -88,6 +88,7 @@ import { getScrollAcceleration } from "../../util/scroll"
 import { TuiPluginRuntime } from "../../plugin"
 import { DialogGoUpsell } from "../../component/dialog-go-upsell"
 import { SessionRetry } from "@/session/retry"
+import { getRevertDiffFiles } from "../../util/revert-diff"
 
 addDefaultParsers(parsers.parsers)
 
@@ -179,10 +180,10 @@ export function Session() {
   const [showThinking, setShowThinking] = kv.signal("thinking_visibility", true)
   const [timestamps, setTimestamps] = kv.signal<"hide" | "show">("timestamps", "hide")
   const [showDetails, setShowDetails] = kv.signal("tool_details_visibility", true)
-  const [showAssistantMetadata, setShowAssistantMetadata] = kv.signal("assistant_metadata_visibility", true)
+  const [showAssistantMetadata, _setShowAssistantMetadata] = kv.signal("assistant_metadata_visibility", true)
   const [showScrollbar, setShowScrollbar] = kv.signal("scrollbar_visible", false)
   const [diffWrapMode] = kv.signal<"word" | "none">("diff_wrap_mode", "word")
-  const [animationsEnabled, setAnimationsEnabled] = kv.signal("animations_enabled", true)
+  const [_animationsEnabled, _setAnimationsEnabled] = kv.signal("animations_enabled", true)
   const [showGenericToolOutput, setShowGenericToolOutput] = kv.signal("generic_tool_output_visibility", false)
   const mini = createMemo(() => kv.get("ui_minimal", false))
   const showHints = createMemo(() => !mini())
@@ -263,7 +264,7 @@ export function Session() {
 
     if (kv.get(GO_UPSELL_DONT_SHOW)) return
 
-    DialogGoUpsell.show(dialog).then((dontShowAgain) => {
+    void DialogGoUpsell.show(dialog).then((dontShowAgain) => {
       if (dontShowAgain) kv.set(GO_UPSELL_DONT_SHOW, true)
       kv.set(GO_UPSELL_LAST_SEEN_AT, Date.now())
     })
@@ -294,7 +295,7 @@ export function Session() {
   useKeyboard((evt) => {
     if (!session()?.parentID) return
     if (keybind.match("app_exit", evt)) {
-      exit()
+      void exit()
     }
   })
 
@@ -505,7 +506,7 @@ export function Session() {
           })
           return
         }
-        sdk.client.session.summarize({
+        void sdk.client.session.summarize({
           sessionID: route.sessionID,
           modelID: selectedModel.modelID,
           providerID: selectedModel.providerID,
@@ -551,7 +552,7 @@ export function Session() {
         const revert = session()?.revert?.messageID
         const message = messages().findLast((x) => (!revert || x.id < revert) && x.role === "user")
         if (!message) return
-        sdk.client.session
+        void sdk.client.session
           .revert({
             sessionID: route.sessionID,
             messageID: message.id,
@@ -590,13 +591,13 @@ export function Session() {
         if (!messageID) return
         const message = messages().find((x) => x.role === "user" && x.id > messageID)
         if (!message) {
-          sdk.client.session.unrevert({
+          void sdk.client.session.unrevert({
             sessionID: route.sessionID,
           })
           prompt?.set({ input: "", parts: [] })
           return
         }
-        sdk.client.session.revert({
+        void sdk.client.session.revert({
           sessionID: route.sessionID,
           messageID: message.id,
         })
@@ -619,7 +620,7 @@ export function Session() {
     {
       title: conceal() ? "Disable code concealment" : "Enable code concealment",
       value: "session.toggle.conceal",
-      keybind: "messages_toggle_conceal" as any,
+      keybind: "messages_toggle_conceal",
       category: "Session",
       onSelect: (dialog) => {
         setConceal((prev) => !prev)
@@ -895,7 +896,7 @@ export function Session() {
           )
           await Clipboard.copy(transcript)
           toast.show({ message: "Session transcript copied to clipboard!", variant: "success" })
-        } catch (error) {
+        } catch {
           toast.show({ message: "Failed to copy session transcript", variant: "error" })
         }
         dialog.clear()
@@ -957,7 +958,7 @@ export function Session() {
 
             toast.show({ message: `Session exported to ${filename}`, variant: "success" })
           }
-        } catch (error) {
+        } catch {
           toast.show({ message: "Failed to export session", variant: "error" })
         }
         dialog.clear()
@@ -1021,31 +1022,7 @@ export function Session() {
   const revertInfo = createMemo(() => session()?.revert)
   const revertMessageID = createMemo(() => revertInfo()?.messageID)
 
-  const revertDiffFiles = createMemo(() => {
-    const diffText = revertInfo()?.diff ?? ""
-    if (!diffText) return []
-
-    try {
-      const patches = parsePatch(diffText)
-      return patches.map((patch) => {
-        const filename = patch.newFileName || patch.oldFileName || "unknown"
-        const cleanFilename = filename.replace(/^[ab]\//, "")
-        return {
-          filename: cleanFilename,
-          additions: patch.hunks.reduce(
-            (sum, hunk) => sum + hunk.lines.filter((line) => line.startsWith("+")).length,
-            0,
-          ),
-          deletions: patch.hunks.reduce(
-            (sum, hunk) => sum + hunk.lines.filter((line) => line.startsWith("-")).length,
-            0,
-          ),
-        }
-      })
-    } catch (error) {
-      return []
-    }
-  })
+  const revertDiffFiles = createMemo(() => getRevertDiffFiles(revertInfo()?.diff ?? ""))
 
   const revertRevertedMessages = createMemo(() => {
     const messageID = revertMessageID()
@@ -1705,9 +1682,6 @@ function ToolPart(props: {
           <Match when={props.part.tool === "grep"}>
             <Grep {...toolprops} />
           </Match>
-          <Match when={props.part.tool === "list"}>
-            <List {...toolprops} />
-          </Match>
           <Match when={props.part.tool === "webfetch"}>
             <WebFetch {...toolprops} />
           </Match>
@@ -2089,44 +2063,28 @@ function Grep(props: ToolProps<typeof GrepTool>) {
   )
 }
 
-function List(props: ToolProps<typeof ListTool>) {
-  const dir = createMemo(() => {
-    if (props.input.path) {
-      return normalizePath(props.input.path)
-    }
-    return ""
-  })
-  return (
-    <InlineTool icon="→" pending="Listing directory..." complete={props.input.path !== undefined} part={props.part}>
-      List {dir()}
-    </InlineTool>
-  )
-}
-
 function WebFetch(props: ToolProps<typeof WebFetchTool>) {
   return (
-    <InlineTool icon="%" pending="Fetching from the web..." complete={(props.input as any).url} part={props.part}>
-      WebFetch {(props.input as any).url}
+    <InlineTool icon="%" pending="Fetching from the web..." complete={props.input.url} part={props.part}>
+      WebFetch {props.input.url}
     </InlineTool>
   )
 }
 
-function CodeSearch(props: ToolProps<any>) {
-  const input = props.input as any
-  const metadata = props.metadata as any
+function CodeSearch(props: ToolProps<typeof CodeSearchTool>) {
+  const metadata = props.metadata as { results?: number }
   return (
-    <InlineTool icon="◇" pending="Searching code..." complete={input.query} part={props.part}>
-      Exa Code Search "{input.query}" <Show when={metadata.results}>({metadata.results} results)</Show>
+    <InlineTool icon="◇" pending="Searching code..." complete={props.input.query} part={props.part}>
+      Exa Code Search "{props.input.query}" <Show when={metadata.results}>({metadata.results} results)</Show>
     </InlineTool>
   )
 }
 
-function WebSearch(props: ToolProps<any>) {
-  const input = props.input as any
-  const metadata = props.metadata as any
+function WebSearch(props: ToolProps<typeof WebSearchTool>) {
+  const metadata = props.metadata as { numResults?: number }
   return (
-    <InlineTool icon="◈" pending="Searching web..." complete={input.query} part={props.part}>
-      Exa Web Search "{input.query}" <Show when={metadata.numResults}>({metadata.numResults} results)</Show>
+    <InlineTool icon="◈" pending="Searching web..." complete={props.input.query} part={props.part}>
+      Exa Web Search "{props.input.query}" <Show when={metadata.numResults}>({metadata.numResults} results)</Show>
     </InlineTool>
   )
 }
@@ -2137,7 +2095,7 @@ function Task(props: ToolProps<typeof TaskTool>) {
 
   onMount(() => {
     if (props.metadata.sessionId && !sync.data.message[props.metadata.sessionId]?.length)
-      sync.session.sync(props.metadata.sessionId)
+      void sync.session.sync(props.metadata.sessionId)
   })
 
   const messages = createMemo(() => sync.data.message[props.metadata.sessionId ?? ""] ?? [])
@@ -2150,7 +2108,9 @@ function Task(props: ToolProps<typeof TaskTool>) {
     )
   })
 
-  const current = createMemo(() => tools().findLast((x) => (x.state as any).title))
+  const current = createMemo(() =>
+    tools().findLast((x) => (x.state.status === "running" || x.state.status === "completed") && x.state.title),
+  )
 
   const isRunning = createMemo(() => props.part.state.status === "running")
 
@@ -2167,8 +2127,11 @@ function Task(props: ToolProps<typeof TaskTool>) {
 
     if (isRunning() && tools().length > 0) {
       // content[0] += ` · ${tools().length} toolcalls`
-      if (current()) content.push(`↳ ${Locale.titlecase(current()!.tool)} ${(current()!.state as any).title}`)
-      else content.push(`↳ ${tools().length} toolcalls`)
+      if (current()) {
+        const state = current()!.state
+        const title = state.status === "running" || state.status === "completed" ? state.title : undefined
+        content.push(`↳ ${Locale.titlecase(current()!.tool)} ${title}`)
+      } else content.push(`↳ ${tools().length} toolcalls`)
     }
 
     if (props.part.state.status === "completed") {

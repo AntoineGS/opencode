@@ -28,7 +28,7 @@ import type { WorkspaceAdaptor } from "@/control-plane/types"
 
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
-  const BUILTIN = ["op-anthropic-auth@0.1.0"]
+  const BUILTIN = ["op-anthropic-auth@0.1.2"]
   const BUILTIN_ORIGINS = BUILTIN.map((spec) => ({
     spec,
     scope: "global" as const,

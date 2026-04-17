@@ -136,7 +136,9 @@ export function tui(input: {
       await TuiPluginRuntime.dispose()
     }
 
+    console.log("starting renderer")
     const renderer = await createCliRenderer(rendererConfig(input.config))
+    console.log("renderer started")
 
     await render(() => {
       return (

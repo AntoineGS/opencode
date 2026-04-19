@@ -44,7 +44,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.SYNC_PAT }}
         run: |
-          upstream=$(git log --oneline | grep "^[a-f0-9]* release: v" | head -1 | sed 's/.* release: v//')
+          upstream=$(gh release list --repo sst/opencode --exclude-drafts --exclude-pre-releases --limit 200 --json tagName -q 'map(.tagName | select(test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))) | .[0] // ""' | sed 's/^v//')
           current=$(gh release list --repo ${{ github.repository }} --limit 200 --json tagName -q 'map(.tagName | sub("^v"; "")) | map(select(test("^[0-9]+\\.[0-9]+\\.[0-9]+-ocv\\.[0-9]+\\.[0-9]+$"))) | .[0] // ""')
           track=$(tr -d '[:space:]' < .github/ocv-track)
           upstream_base=$(echo "$upstream" | sed -E 's/-(vim|ocv)\..*$//')

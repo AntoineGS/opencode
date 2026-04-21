@@ -60,9 +60,15 @@ ocv update
 
 `i` `I` `a` `A` `o` `O` `R` `x` `~` `dd` `dw` `cc` `cw` `S` `J`
 
-**Yank / put / undo**
+**yank / put / undo**
 
-`yy` `yw` `p` `P` `u` `Ctrl+r`
+`yy` `yw` `p` `p` `u` `ctrl+r`
+
+> [!TIP]
+> Copy the current prompt selection with `<leader>y` (default: `ctrl+x` then `y`). Configure it with `keybinds.prompt_copy_selection`.
+
+> [!NOTE]
+> `<leader>y` copies the prompt selection when one exists. Otherwise it keeps the existing message copy behavior.
 
 **Visual**
 
@@ -143,6 +149,21 @@ By default, vim insert mode keeps `Enter` for newlines. If you want `Enter` to s
   "vim_enter_submit": true
 }
 ```
+
+### System clipboard register
+
+By default, vim mode uses an internal register for `y` and `p`. If you want yank and paste to use the system clipboard instead, add this to `tui.json`:
+
+```json
+{
+  "vim_system_clipboard_register": true
+}
+```
+
+With this enabled, yank operations sync to the system clipboard and `p` / `P` paste from it.
+
+> [!NOTE]
+> Terminal/OS clipboard shortcuts don’t preserve Vim linewise register state. External clipboard text is pasted as characterwise text.
 
 ## Feedback
 

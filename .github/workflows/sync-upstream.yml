@@ -76,12 +76,23 @@ jobs:
           GH_TOKEN: ${{ secrets.SYNC_PAT }}
         run: gh workflow run publish-ocv.yml --repo ${{ github.repository }} --ref ocv -f version=${{ steps.version.outputs.release }}
 
+      - name: Close failure issue on success
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_PAT }}
+        run: |
+          existing=$(gh issue list --repo ${{ github.repository }} --state open --limit 1000 --json number,title -q '.[] | select(.title == "[actions]: sync upstream failed") | .number' | head -n 1)
+          if [ -z "$existing" ]; then
+            exit 0
+          fi
+          gh issue close "$existing" --repo ${{ github.repository }} --comment "Closed automatically after a successful sync run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
       - name: Notify on failure
         if: failure()
         env:
           GH_TOKEN: ${{ secrets.SYNC_PAT }}
         run: |
-          existing=$(gh issue list --repo ${{ github.repository }} --search "[actions]: sync upstream failed" --state open --json number -q '.[0].number')
+          existing=$(gh issue list --repo ${{ github.repository }} --state open --limit 1000 --json number,title -q '.[] | select(.title == "[actions]: sync upstream failed") | .number' | head -n 1)
           if [ -z "$existing" ]; then
             gh issue create --repo ${{ github.repository }} \
               --title "[actions]: sync upstream failed" \

@@ -16,7 +16,7 @@ jobs:
         run: |
           echo "Checking PR title: $PR_TITLE"
 
-          if [[ "$PR_TITLE" =~ ^(feat|fix|chore|docs|test|refactor)(\([^)]+\))?:\ .+ ]]; then
+          if printf '%s\n' "$PR_TITLE" | grep -Eq '^(feat|fix|chore|docs|test|refactor)(\([^)]+\))?: .+'; then
             exit 0
           fi
 

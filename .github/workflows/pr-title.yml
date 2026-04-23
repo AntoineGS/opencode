@@ -1,0 +1,28 @@
+name: pr-title
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+jobs:
+  check-title:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Validate PR title
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          echo "Checking PR title: $PR_TITLE"
+
+          if [[ "$PR_TITLE" =~ ^(feat|fix|chore|docs|test|refactor)(\([^)]+\))?:\ .+ ]]; then
+            exit 0
+          fi
+
+          echo "::error title=Invalid PR title::PR title must start with feat:, fix:, chore:, docs:, test:, or refactor:, with an optional scope like feat(vim):"
+          echo "Examples:"
+          echo "  feat: add db and cb motions"
+          echo "  feat(vim): add db and cb motions"
+          echo "  fix: clear pending state"
+          exit 1

@@ -1185,6 +1185,82 @@ describe("vim motion handler", () => {
     expect(ctx.textarea.cursorOffset).toBe(0)
   })
 
+  test("db deletes to current word start", () => {
+    const ctx = createHandler("hello world test")
+    ctx.textarea.cursorOffset = 8
+
+    ctx.handler.handleKey(createEvent("d").event)
+    ctx.handler.handleKey(createEvent("b").event)
+    expect(ctx.textarea.plainText).toBe("hello rld test")
+    expect(ctx.textarea.cursorOffset).toBe(6)
+    expect(ctx.state.pending()).toBe("")
+  })
+
+  test("db at start of text is no-op", () => {
+    const ctx = createHandler("hello world")
+    ctx.textarea.cursorOffset = 0
+
+    ctx.handler.handleKey(createEvent("d").event)
+    ctx.handler.handleKey(createEvent("b").event)
+    expect(ctx.textarea.plainText).toBe("hello world")
+    expect(ctx.textarea.cursorOffset).toBe(0)
+  })
+
+  test("cb deletes to current word start and enters insert", () => {
+    const ctx = createHandler("hello world test")
+    ctx.textarea.cursorOffset = 8
+
+    ctx.handler.handleKey(createEvent("c").event)
+    ctx.handler.handleKey(createEvent("b").event)
+    expect(ctx.textarea.plainText).toBe("hello rld test")
+    expect(ctx.textarea.cursorOffset).toBe(6)
+    expect(ctx.state.mode()).toBe("insert")
+    expect(ctx.state.pending()).toBe("")
+  })
+
+  test("cb at start of text does not delete text", () => {
+    const ctx = createHandler("hello world")
+    ctx.textarea.cursorOffset = 0
+
+    ctx.handler.handleKey(createEvent("c").event)
+    ctx.handler.handleKey(createEvent("b").event)
+    expect(ctx.textarea.plainText).toBe("hello world")
+    expect(ctx.textarea.cursorOffset).toBe(0)
+    expect(ctx.state.pending()).toBe("")
+  })
+
+  test("db with register captures deleted text", () => {
+    let reg = null as { text: string; linewise: boolean } | null
+    const ctx = createHandler("hello world test", {
+      register: {
+        set(next) {
+          reg = next
+        },
+      },
+    })
+    ctx.textarea.cursorOffset = 8
+
+    ctx.handler.handleKey(createEvent("d").event)
+    ctx.handler.handleKey(createEvent("b").event)
+    expect(reg).toEqual({ text: "wo", linewise: false })
+  })
+
+  test("cb with register captures deleted text", () => {
+    let reg = null as { text: string; linewise: boolean } | null
+    const ctx = createHandler("hello world test", {
+      register: {
+        set(next) {
+          reg = next
+        },
+      },
+    })
+    ctx.textarea.cursorOffset = 8
+
+    ctx.handler.handleKey(createEvent("c").event)
+    ctx.handler.handleKey(createEvent("b").event)
+    expect(reg).toEqual({ text: "wo", linewise: false })
+  })
+
   test("J joins current line with next", () => {
     const ctx = createHandler("one\ntwo\nthree")
     ctx.textarea.cursorOffset = 1

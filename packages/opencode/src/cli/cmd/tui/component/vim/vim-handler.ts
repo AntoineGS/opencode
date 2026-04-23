@@ -11,6 +11,7 @@ import {
   deleteSelection,
   deleteUnderCursor,
   deleteWord,
+  deleteWordBackward,
   findChar,
   findCharInLine,
   firstNonWhitespace,
@@ -340,6 +341,17 @@ export function createVimHandler(input: {
         return true
       }
 
+      if (key === "b" && !event.shift && !hasModifier(event)) {
+        begin(() => {
+          const reg = deleteWordBackward(input.textarea())
+          if (reg) setRegister(reg)
+          input.state.clearPending()
+          input.state.setMode("insert")
+        })
+        event.preventDefault()
+        return true
+      }
+
       if (hasModifier(event)) {
         input.state.clearPending()
         return false
@@ -362,6 +374,16 @@ export function createVimHandler(input: {
       if (key === "w" && !event.shift && !hasModifier(event)) {
         edit(() => {
           const reg = deleteWord(input.textarea())
+          if (reg) setRegister(reg)
+          input.state.clearPending()
+        })
+        event.preventDefault()
+        return true
+      }
+
+      if (key === "b" && !event.shift && !hasModifier(event)) {
+        edit(() => {
+          const reg = deleteWordBackward(input.textarea())
           if (reg) setRegister(reg)
           input.state.clearPending()
         })

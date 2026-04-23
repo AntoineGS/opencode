@@ -302,6 +302,16 @@ export function deleteWord(textarea: TextareaRenderable): VimRegister {
   return { text: yanked, linewise: false }
 }
 
+export function deleteWordBackward(textarea: TextareaRenderable): VimRegister {
+  const text = textarea.plainText
+  const startOffset = textarea.cursorOffset
+  const endOffset = prevWordStart(text, startOffset, false)
+  if (endOffset >= startOffset) return null
+  const yanked = text.slice(endOffset, startOffset)
+  deleteOffsets(textarea, endOffset, startOffset)
+  return { text: yanked, linewise: false }
+}
+
 export function deleteLine(textarea: TextareaRenderable): VimRegister {
   const text = textarea.plainText
   if (!text.length) return null

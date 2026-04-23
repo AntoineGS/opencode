@@ -58,7 +58,7 @@ ocv update
 
 **Editing**
 
-`i` `I` `a` `A` `o` `O` `R` `x` `~` `dd` `dw` `cc` `cw` `S` `J`
+`i` `I` `a` `A` `o` `O` `R` `x` `~` `dd` `dw` `db` `cc` `cw` `cb` `S` `J`
 
 **yank / put / undo**
 

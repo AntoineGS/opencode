@@ -96,9 +96,13 @@ jobs:
           if [ -n "$PREV_TAG" ]; then
             PREV_PATCH="${PREV_TAG##*-ocv.}"
             git log --first-parent --reverse --format='%H' "$PREV_TAG"..HEAD | while read -r sha; do
-              gh api "repos/${{ github.repository }}/commits/$sha/pulls" -q '.[] | select(.base.ref == "ocv") | "\(.number)\t\(.title)"' || true
-            done | awk -F '\t' '!seen[$1]++' | while IFS=$'\t' read -r num title; do
+              gh api "repos/${{ github.repository }}/commits/$sha/pulls" -q '.[] | select(.base.ref == "ocv") | "\(.number)\t\(.title)\t\(.user.login // "")"' || true
+            done | awk -F '\t' '!seen[$1]++' | while IFS=$'\t' read -r num title author; do
               [ -n "$num" ] || continue
+              if [ -n "$author" ]; then
+                echo "$title - #$num (@$author)"
+                continue
+              fi
               echo "$title - #$num"
             done > "$PRS_FILE"
           else

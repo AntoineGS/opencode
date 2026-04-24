@@ -18,13 +18,22 @@ For large changes, behavior changes, or new features, consider opening an issue 
 
 ## Development
 
-Requires [Bun](https://bun.sh) 1.3+.
+Use [Bun](https://bun.sh) matching `package.json` (`packageManager`).
 
 ```bash
 bun install
 bun test test/cli/tui/vim-motions.test.ts  # from packages/opencode
-
 ```
+
+Pre-push runs:
+
+```bash
+cd packages/opencode
+bun typecheck
+bun test test/cli/tui/vim-*.test.ts
+```
+
+If pre-push fails on Bun version, update Bun.
 
 Running Locally
 

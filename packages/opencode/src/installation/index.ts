@@ -14,7 +14,6 @@ import { InstallationChannel, InstallationVersion } from "./version"
 
 const log = Log.create({ service: "installation" })
 const npm = "@leohenon/ocv"
-const npmPath = encodeURIComponent(npm)
 
 export type Method = "curl" | "npm" | "yarn" | "pnpm" | "bun" | "brew" | "scoop" | "choco" | "unknown"
 
@@ -23,14 +22,14 @@ export type ReleaseType = "patch" | "minor" | "major"
 export const Event = {
   Updated: BusEvent.define(
     "installation.updated",
-    z.object({
-      version: z.string(),
+    Schema.Struct({
+      version: Schema.String,
     }),
   ),
   UpdateAvailable: BusEvent.define(
     "installation.update-available",
-    z.object({
-      version: z.string(),
+    Schema.Struct({
+      version: Schema.String,
     }),
   ),
 }
@@ -135,6 +134,17 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | ChildPro
         Effect.catch(() => Effect.succeed({ code: ChildProcessSpawner.ExitCode(1), stdout: "", stderr: "" })),
       )
 
+      const viewVersion = Effect.fnUntraced(function* (method: "npm" | "pnpm" | "bun", spec: string) {
+        const args = method === "bun" ? ["pm", "view", spec, "version", "--json"] : ["view", spec, "version", "--json"]
+        const result = yield* run([method, ...args])
+        if (result.code !== 0 || !result.stdout.trim()) {
+          return yield* new UpgradeFailedError({
+            stderr: result.stderr || result.stdout || `Failed to resolve ${spec}`,
+          })
+        }
+        return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.String))(result.stdout)
+      })
+
       const getBrewFormula = Effect.fnUntraced(function* () {
         const tapFormula = yield* text(["brew", "list", "--formula", "leohenon/tap/ocv"])
         if (tapFormula.includes("ocv")) return "leohenon/tap/ocv"
@@ -220,15 +230,7 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | ChildPro
         }
 
         if (detectedMethod === "npm" || detectedMethod === "bun" || detectedMethod === "pnpm") {
-          const r = (yield* text(["npm", "config", "get", "registry"])).trim()
-          const reg = r || "https://registry.npmjs.org"
-          const registry = reg.endsWith("/") ? reg.slice(0, -1) : reg
-          const channel = InstallationChannel
-          const response = yield* httpOk.execute(
-            HttpClientRequest.get(`${registry}/${npmPath}/${channel}`).pipe(HttpClientRequest.acceptJson),
-          )
-          const data = yield* HttpClientResponse.schemaBodyJson(NpmPackage)(response)
-          return data.version
+          return yield* viewVersion(detectedMethod, `${npm}@${InstallationChannel}`)
         }
 
         if (detectedMethod === "choco") {

@@ -3,6 +3,7 @@ import { Effect, Layer, Stream } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { Installation } from "../../src/installation"
+import { InstallationChannel } from "../../src/installation/version"
 
 const encoder = new TextEncoder()
 
@@ -68,11 +69,15 @@ describe("installation", () => {
       expect(result).toBe("4.0.0-beta.1")
     })
 
-    test("reads npm registry versions", async () => {
+    test("reads npm versions via npm view", async () => {
+      const calls: string[][] = []
       const layer = testLayer(
-        () => jsonResponse({ version: "1.5.0" }),
+        () => {
+          throw new Error("unexpected http request")
+        },
         (cmd, args) => {
-          if (cmd === "npm" && args.includes("registry")) return "https://registry.npmjs.org\n"
+          calls.push([cmd, ...args])
+          if (cmd === "npm" && args[0] === "view") return '"1.5.0"\n'
           return ""
         },
       )
@@ -81,18 +86,47 @@ describe("installation", () => {
         Installation.Service.use((svc) => svc.latest("npm")).pipe(Effect.provide(layer)),
       )
       expect(result).toBe("1.5.0")
+      expect(calls).toContainEqual(["npm", "view", `@leohenon/ocv@${InstallationChannel}`, "version", "--json"])
     })
 
-    test("reads npm registry versions for bun method", async () => {
+    test("reads npm versions via bun pm view", async () => {
+      const calls: string[][] = []
       const layer = testLayer(
-        () => jsonResponse({ version: "1.6.0" }),
-        () => "",
+        () => {
+          throw new Error("unexpected http request")
+        },
+        (cmd, args) => {
+          calls.push([cmd, ...args])
+          if (cmd === "bun" && args[0] === "pm") return '"1.6.0"\n'
+          return ""
+        },
       )
 
       const result = await Effect.runPromise(
         Installation.Service.use((svc) => svc.latest("bun")).pipe(Effect.provide(layer)),
       )
       expect(result).toBe("1.6.0")
+      expect(calls).toContainEqual(["bun", "pm", "view", `@leohenon/ocv@${InstallationChannel}`, "version", "--json"])
+    })
+
+    test("reads npm versions via pnpm view", async () => {
+      const calls: string[][] = []
+      const layer = testLayer(
+        () => {
+          throw new Error("unexpected http request")
+        },
+        (cmd, args) => {
+          calls.push([cmd, ...args])
+          if (cmd === "pnpm" && args[0] === "view") return '"1.7.0"\n'
+          return ""
+        },
+      )
+
+      const result = await Effect.runPromise(
+        Installation.Service.use((svc) => svc.latest("pnpm")).pipe(Effect.provide(layer)),
+      )
+      expect(result).toBe("1.7.0")
+      expect(calls).toContainEqual(["pnpm", "view", `@leohenon/ocv@${InstallationChannel}`, "version", "--json"])
     })
 
     test("reads scoop manifest versions", async () => {
@@ -118,8 +152,8 @@ describe("installation", () => {
         () => jsonResponse({ versions: { stable: "2.0.0" } }),
         (cmd, args) => {
           // getBrewFormula: return core formula (no tap)
-          if (cmd === "brew" && args.includes("--formula") && args.includes("anomalyco/tap/opencode")) return ""
-          if (cmd === "brew" && args.includes("--formula") && args.includes("opencode")) return "opencode"
+          if (cmd === "brew" && args.includes("--formula") && args.includes("leohenon/tap/ocv")) return ""
+          if (cmd === "brew" && args.includes("--formula") && args.includes("ocv")) return "ocv"
           return ""
         },
       )
@@ -137,7 +171,7 @@ describe("installation", () => {
       const layer = testLayer(
         () => jsonResponse({}), // HTTP not used for tap formula
         (cmd, args) => {
-          if (cmd === "brew" && args.includes("anomalyco/tap/opencode") && args.includes("--formula")) return "opencode"
+          if (cmd === "brew" && args.includes("leohenon/tap/ocv") && args.includes("--formula")) return "ocv"
           if (cmd === "brew" && args.includes("--json=v2")) return brewInfoJson
           return ""
         },

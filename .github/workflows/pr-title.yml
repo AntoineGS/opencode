@@ -16,13 +16,9 @@ jobs:
         run: |
           echo "Checking PR title: $PR_TITLE"
 
-          if printf '%s\n' "$PR_TITLE" | grep -Eq '^(feat|fix|chore|docs|test|refactor)(\([^)]+\))?: .+'; then
+          if printf '%s\n' "$PR_TITLE" | grep -Eq '^(feat|fix|chore|docs|test|refactor|ci)(\([^)]+\))?: .+'; then
             exit 0
           fi
 
-          echo "::error title=Invalid PR title::PR title must start with feat:, fix:, chore:, docs:, test:, or refactor:, with an optional scope like feat(vim):"
-          echo "Examples:"
-          echo "  feat: add db and cb motions"
-          echo "  feat(vim): add db and cb motions"
-          echo "  fix: clear pending state"
+          echo "::error title=Invalid PR title::PR title must start with feat:, fix:, chore:, docs:, test:, refactor:, or ci:"
           exit 1

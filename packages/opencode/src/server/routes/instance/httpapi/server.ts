@@ -11,13 +11,14 @@ import { Filesystem } from "@/util"
 import { authorizationLayer } from "./auth"
 import { ConfigApi, configHandlers } from "./config"
 import { FileApi, fileHandlers } from "./file"
+import { InstanceApi, instanceHandlers } from "./instance"
 import { McpApi, mcpHandlers } from "./mcp"
 import { PermissionApi, permissionHandlers } from "./permission"
 import { ProjectApi, projectHandlers } from "./project"
 import { ProviderApi, providerHandlers } from "./provider"
 import { QuestionApi, questionHandlers } from "./question"
 import { WorkspaceApi, workspaceHandlers } from "./workspace"
-import { memoMap } from "@/effect/memo-map"
+import { memoMap } from "@opencode-ai/core/effect/memo-map"
 
 const Query = Schema.Struct({
   directory: Schema.optional(Schema.String),
@@ -63,6 +64,7 @@ const instance = HttpRouter.middleware()(
 export const routes = Layer.mergeAll(
   HttpApiBuilder.layer(ConfigApi).pipe(Layer.provide(configHandlers)),
   HttpApiBuilder.layer(FileApi).pipe(Layer.provide(fileHandlers)),
+  HttpApiBuilder.layer(InstanceApi).pipe(Layer.provide(instanceHandlers)),
   HttpApiBuilder.layer(McpApi).pipe(Layer.provide(mcpHandlers)),
   HttpApiBuilder.layer(ProjectApi).pipe(Layer.provide(projectHandlers)),
   HttpApiBuilder.layer(QuestionApi).pipe(Layer.provide(questionHandlers)),

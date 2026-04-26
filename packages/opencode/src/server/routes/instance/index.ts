@@ -16,6 +16,7 @@ import { QuestionRoutes } from "./question"
 import { PermissionRoutes } from "./permission"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { ExperimentalHttpApiServer } from "./httpapi/server"
+import { ExperimentalPaths } from "./httpapi/experimental"
 import { FilePaths } from "./httpapi/file"
 import { InstancePaths } from "./httpapi/instance"
 import { McpPaths } from "./httpapi/mcp"
@@ -44,13 +45,24 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
     app.get("/permission", (c) => handler(c.req.raw, context))
     app.post("/permission/:requestID/reply", (c) => handler(c.req.raw, context))
     app.get("/config", (c) => handler(c.req.raw, context))
+    app.patch("/config", (c) => handler(c.req.raw, context))
     app.get("/config/providers", (c) => handler(c.req.raw, context))
+    app.get(ExperimentalPaths.console, (c) => handler(c.req.raw, context))
+    app.get(ExperimentalPaths.consoleOrgs, (c) => handler(c.req.raw, context))
+    app.get(ExperimentalPaths.toolIDs, (c) => handler(c.req.raw, context))
+    app.get(ExperimentalPaths.worktree, (c) => handler(c.req.raw, context))
+    app.post(ExperimentalPaths.worktree, (c) => handler(c.req.raw, context))
+    app.delete(ExperimentalPaths.worktree, (c) => handler(c.req.raw, context))
+    app.post(ExperimentalPaths.worktreeReset, (c) => handler(c.req.raw, context))
+    app.get(ExperimentalPaths.resource, (c) => handler(c.req.raw, context))
     app.get("/provider", (c) => handler(c.req.raw, context))
     app.get("/provider/auth", (c) => handler(c.req.raw, context))
     app.post("/provider/:providerID/oauth/authorize", (c) => handler(c.req.raw, context))
     app.post("/provider/:providerID/oauth/callback", (c) => handler(c.req.raw, context))
     app.get("/project", (c) => handler(c.req.raw, context))
     app.get("/project/current", (c) => handler(c.req.raw, context))
+    app.post("/project/git/init", (c) => handler(c.req.raw, context))
+    app.patch("/project/:projectID", (c) => handler(c.req.raw, context))
     app.get(FilePaths.findText, (c) => handler(c.req.raw, context))
     app.get(FilePaths.findFile, (c) => handler(c.req.raw, context))
     app.get(FilePaths.findSymbol, (c) => handler(c.req.raw, context))
@@ -58,6 +70,7 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
     app.get(FilePaths.content, (c) => handler(c.req.raw, context))
     app.get(FilePaths.status, (c) => handler(c.req.raw, context))
     app.get(InstancePaths.path, (c) => handler(c.req.raw, context))
+    app.post(InstancePaths.dispose, (c) => handler(c.req.raw, context))
     app.get(InstancePaths.vcs, (c) => handler(c.req.raw, context))
     app.get(InstancePaths.vcsDiff, (c) => handler(c.req.raw, context))
     app.get(InstancePaths.command, (c) => handler(c.req.raw, context))
@@ -66,6 +79,13 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
     app.get(InstancePaths.lsp, (c) => handler(c.req.raw, context))
     app.get(InstancePaths.formatter, (c) => handler(c.req.raw, context))
     app.get(McpPaths.status, (c) => handler(c.req.raw, context))
+    app.post(McpPaths.status, (c) => handler(c.req.raw, context))
+    app.post(McpPaths.auth, (c) => handler(c.req.raw, context))
+    app.post(McpPaths.authCallback, (c) => handler(c.req.raw, context))
+    app.post(McpPaths.authAuthenticate, (c) => handler(c.req.raw, context))
+    app.delete(McpPaths.auth, (c) => handler(c.req.raw, context))
+    app.post(McpPaths.connect, (c) => handler(c.req.raw, context))
+    app.post(McpPaths.disconnect, (c) => handler(c.req.raw, context))
   }
 
   return app

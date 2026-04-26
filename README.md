@@ -50,11 +50,16 @@ ocv update
 
 ### Vim motions
 
+Toggle via command palette (`Ctrl+p` -> `Toggle vim mode`).
+
 **Movement**
 
 `h` `j` `k` `l` `w` `b` `e` `W` `B` `E` `0` `^` `_` `$` `gg` `G`
 `f` `F` `t` `T` `;` `,`
 `Ctrl+e` `Ctrl+y` `Ctrl+d` `Ctrl+u` `Ctrl+f` `Ctrl+b`
+
+> [!NOTE]
+> Unicode word boundaries are not supported.
 
 **Editing**
 
@@ -62,20 +67,16 @@ ocv update
 
 **yank / put / undo**
 
-`yy` `yw` `p` `p` `u` `ctrl+r`
+`yy` `yw` `p` `P` `u` `ctrl+r`
 
-> [!TIP]
-> Copy the current prompt selection with `<leader>y` (default: `ctrl+x` then `y`). Configure it with `keybinds.prompt_copy_selection`.
-
-> [!NOTE]
-> `<leader>y` copies the prompt selection when one exists. Otherwise it keeps the existing message copy behavior.
+- Copy the current prompt selection with `<leader>y` (default: `ctrl+x` then `y`).
+- Configure it with `keybinds.prompt_copy_selection`.
+- If a prompt selection exists, `<leader>y` copies it. Otherwise it keeps the existing message copy behavior.
+- To sync yanks and pastes with the system clipboard, see [System clipboard register](#system-clipboard-register).
 
 **Visual**
 
 `v` `V`
-
-> [!TIP]
-> Toggle via command palette (`Ctrl+p` -> `Toggle vim mode`).
 
 ### Anthropic OAuth
 
@@ -135,8 +136,7 @@ Hides extra UI hints and tips.
 | -------------------------------------------------- | ------------------------------------------------- |
 | <img src=".github/minimal-ui-off.png" width="400"> | <img src=".github/minimal-ui-on.png" width="400"> |
 
-> [!TIP]
-> Toggle via command palette (`Ctrl+p` -> `Toggle minimal ui`).
+Toggle via command palette (`Ctrl+p` -> `Toggle minimal ui`).
 
 ## Configuration
 

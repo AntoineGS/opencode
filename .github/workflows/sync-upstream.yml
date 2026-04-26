@@ -5,6 +5,10 @@ on:
     - cron: "0 */6 * * *"
   workflow_dispatch:
 
+concurrency:
+  group: sync-upstream
+  cancel-in-progress: false
+
 jobs:
   sync:
     runs-on: ubuntu-latest
@@ -81,20 +85,33 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.SYNC_PAT }}
         run: |
-          existing=$(gh issue list --repo ${{ github.repository }} --state open --limit 1000 --json number,title -q '.[] | select(.title == "[actions]: sync upstream failed") | .number' | head -n 1)
-          if [ -z "$existing" ]; then
+          issues=$(gh issue list --repo ${{ github.repository }} --state open --limit 1000 --json number,title -q '.[] | select(.title == "[ci]: sync upstream failed" or .title == "[actions]: sync upstream failed") | .number')
+          if [ -z "$issues" ]; then
             exit 0
           fi
-          gh issue close "$existing" --repo ${{ github.repository }} --comment "Closed automatically after a successful sync run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          printf '%s\n' "$issues" | while read -r number; do
+            gh issue close "$number" --repo ${{ github.repository }} --comment "Closed automatically after a successful sync run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          done
 
       - name: Notify on failure
         if: failure()
         env:
           GH_TOKEN: ${{ secrets.SYNC_PAT }}
         run: |
-          existing=$(gh issue list --repo ${{ github.repository }} --state open --limit 1000 --json number,title -q '.[] | select(.title == "[actions]: sync upstream failed") | .number' | head -n 1)
-          if [ -z "$existing" ]; then
-            gh issue create --repo ${{ github.repository }} \
-              --title "[actions]: sync upstream failed" \
-              --body "Sync workflow failed. Likely a merge conflict. [View run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+          issues=$(gh issue list --repo ${{ github.repository }} --state open --limit 1000 --json number,title -q '.[] | select(.title == "[ci]: sync upstream failed" or .title == "[actions]: sync upstream failed") | [.number, .title] | @tsv')
+          tracker=$(printf '%s\n' "$issues" | awk -F '\t' '$2 == "[ci]: sync upstream failed" { print $1; exit }')
+          if [ -z "$tracker" ]; then
+            tracker=$(printf '%s\n' "$issues" | awk -F '\t' 'NF { print $1; exit }')
+            if [ -n "$tracker" ]; then
+              gh issue edit "$tracker" --repo ${{ github.repository }} --title "[ci]: sync upstream failed"
+            fi
           fi
+          if [ -z "$tracker" ]; then
+            gh issue create --repo ${{ github.repository }} \
+              --title "[ci]: sync upstream failed" \
+              --body "Sync workflow failed. Likely a merge conflict. [View run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+            exit 0
+          fi
+          printf '%s\n' "$issues" | awk -F '\t' -v tracker="$tracker" 'NF && $1 != tracker { print $1 }' | while read -r number; do
+            gh issue close "$number" --repo ${{ github.repository }} --comment "Closing duplicate; tracking this failure in #$tracker."
+          done

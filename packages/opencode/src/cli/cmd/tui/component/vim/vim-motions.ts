@@ -549,13 +549,15 @@ export function deleteWordEnd(textarea: TextareaRenderable, big = false): VimReg
   return { text: yanked, linewise: false }
 }
 
-export function deleteLine(textarea: TextareaRenderable): VimRegister {
+export function deleteLine(textarea: TextareaRenderable, anchor?: number): VimRegister {
   const text = textarea.plainText
   if (!text.length) return null
 
   const offset = textarea.cursorOffset
-  const start = lineStart(text, offset)
-  const end = lineEnd(text, offset)
+  const lo = anchor !== undefined ? Math.min(anchor, offset) : offset
+  const hi = anchor !== undefined ? Math.max(anchor, offset) : offset
+  const start = lineStart(text, lo)
+  const end = lineEnd(text, hi)
   const yanked = text.slice(start, end)
 
   if (end < text.length) {
@@ -625,14 +627,27 @@ export function joinLines(textarea: TextareaRenderable) {
   textarea.cursorOffset = end
 }
 
-export function substituteLine(textarea: TextareaRenderable): VimRegister {
+export function substituteLine(textarea: TextareaRenderable, anchor?: number): VimRegister {
   const text = textarea.plainText
-  const start = lineStart(text, textarea.cursorOffset)
-  const end = lineEnd(text, textarea.cursorOffset)
+  const offset = textarea.cursorOffset
+  const lo = anchor !== undefined ? Math.min(anchor, offset) : offset
+  const hi = anchor !== undefined ? Math.max(anchor, offset) : offset
+  const start = lineStart(text, lo)
+  const end = lineEnd(text, hi)
   if (end <= start) return null
   const yanked = text.slice(start, end)
   deleteOffsets(textarea, start, end)
   return { text: yanked, linewise: true }
+}
+
+export function substituteLineEnd(textarea: TextareaRenderable): VimRegister {
+  const text = textarea.plainText
+  const start = textarea.cursorOffset
+  const end = lineEnd(text, start)
+  if (end <= start) return null
+  const yanked = text.slice(start, end)
+  deleteOffsets(textarea, start, end)
+  return { text: yanked, linewise: false }
 }
 
 export function replaceUnderCursor(textarea: TextareaRenderable, value: string) {

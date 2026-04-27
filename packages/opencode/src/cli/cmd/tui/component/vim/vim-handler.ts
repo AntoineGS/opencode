@@ -48,6 +48,7 @@ import {
   prevWordStart,
   replaceUnderCursor,
   substituteLine,
+  substituteLineEnd,
   syncSelection,
   toggleCase,
   toggleSelectionCase,
@@ -294,9 +295,20 @@ export function createVimHandler(input: {
         return true
       }
 
-      if ((key === "d" || key === "x") && !hasModifier(event)) {
+      if ((key === "d" || key === "x") && !event.shift && !hasModifier(event)) {
         edit(() => {
           const reg = deleteSelection(input.textarea(), lw, a ?? undefined)
+          if (reg) setRegister(reg)
+          clearSelection(input.textarea())
+          input.state.setMode("normal")
+        })
+        event.preventDefault()
+        return true
+      }
+
+      if (isShifted(event, "d") && !hasModifier(event)) {
+        edit(() => {
+          const reg = deleteLine(input.textarea(), a ?? undefined)
           if (reg) setRegister(reg)
           clearSelection(input.textarea())
           input.state.setMode("normal")
@@ -317,6 +329,17 @@ export function createVimHandler(input: {
       if (key === "c" && !event.shift && !hasModifier(event)) {
         begin(() => {
           const reg = deleteSelection(input.textarea(), lw, a ?? undefined)
+          if (reg) setRegister(reg)
+          clearSelection(input.textarea())
+          input.state.setMode("insert")
+        })
+        event.preventDefault()
+        return true
+      }
+
+      if (isShifted(event, "c") && !hasModifier(event)) {
+        begin(() => {
+          const reg = substituteLine(input.textarea(), a ?? undefined)
           if (reg) setRegister(reg)
           clearSelection(input.textarea())
           input.state.setMode("insert")
@@ -643,6 +666,16 @@ export function createVimHandler(input: {
       edit(() => {
         const reg = deleteLineEnd(input.textarea())
         if (reg) setRegister(reg)
+      })
+      event.preventDefault()
+      return true
+    }
+
+    if (isShifted(event, "c") && !hasModifier(event)) {
+      begin(() => {
+        const reg = substituteLineEnd(input.textarea())
+        if (reg) setRegister(reg)
+        input.state.setMode("insert")
       })
       event.preventDefault()
       return true

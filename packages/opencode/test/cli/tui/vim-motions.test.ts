@@ -1214,6 +1214,32 @@ describe("vim motion handler", () => {
     expect(ctx.state.register()).toEqual({ text: "wo", linewise: false })
   })
 
+  test("C deletes to end of line, enters insert, and populates register", () => {
+    const ctx = createHandler("one\ntwo\nthree")
+    ctx.textarea.cursorOffset = 5
+    const c = createEvent("C")
+
+    expect(ctx.handler.handleKey(c.event)).toBe(true)
+    expect(c.prevented()).toBe(true)
+    expect(ctx.state.mode()).toBe("insert")
+    expect(ctx.textarea.plainText).toBe("one\nt\nthree")
+    expect(ctx.textarea.cursorOffset).toBe(5)
+    expect(ctx.state.register()).toEqual({ text: "wo", linewise: false })
+  })
+
+  test("C on empty line enters insert without changes", () => {
+    const ctx = createHandler("one\n\nthree")
+    ctx.textarea.cursorOffset = 4
+    const c = createEvent("C")
+
+    expect(ctx.handler.handleKey(c.event)).toBe(true)
+    expect(c.prevented()).toBe(true)
+    expect(ctx.state.mode()).toBe("insert")
+    expect(ctx.textarea.plainText).toBe("one\n\nthree")
+    expect(ctx.textarea.cursorOffset).toBe(4)
+    expect(ctx.state.register()).toBeNull()
+  })
+
   test("cc clears current line and enters insert", () => {
     const ctx = createHandler("one\ntwo\nthree")
     ctx.textarea.cursorOffset = 5
@@ -2843,6 +2869,142 @@ describe("vim motion handler", () => {
     expect(ctx.textarea.plainText).toBe(" world")
     expect(ctx.state.mode()).toBe("insert")
     expect(ctx.state.register()).toEqual({ text: "hello", linewise: false })
+  })
+
+  test("visual C wipes selected line and enters insert", () => {
+    const ctx = createHandler("one two three")
+    ctx.textarea.cursorOffset = 0
+
+    ctx.handler.handleKey(createEvent("v").event)
+    ctx.handler.handleKey(createEvent("w").event)
+
+    ctx.handler.handleKey(createEvent("C").event)
+    expect(ctx.textarea.plainText).toBe("")
+    expect(ctx.textarea.cursorOffset).toBe(0)
+    expect(ctx.state.mode()).toBe("insert")
+    expect(ctx.state.register()).toEqual({ text: "one two three", linewise: true })
+  })
+
+  test("visual C across multiple lines collapses to one empty line", () => {
+    const ctx = createHandler("one\ntwo\nthree")
+    ctx.textarea.cursorOffset = 1
+
+    ctx.handler.handleKey(createEvent("v").event)
+    ctx.handler.handleKey(createEvent("j").event)
+
+    ctx.handler.handleKey(createEvent("C").event)
+    expect(ctx.textarea.plainText).toBe("\nthree")
+    expect(ctx.textarea.cursorOffset).toBe(0)
+    expect(ctx.state.mode()).toBe("insert")
+    expect(ctx.state.register()).toEqual({ text: "one\ntwo", linewise: true })
+  })
+
+  test("visual D removes selected line and exits visual", () => {
+    const ctx = createHandler("one\ntwo\nthree")
+    ctx.textarea.cursorOffset = 4
+
+    ctx.handler.handleKey(createEvent("v").event)
+    ctx.handler.handleKey(createEvent("l").event)
+
+    ctx.handler.handleKey(createEvent("D").event)
+    expect(ctx.textarea.plainText).toBe("one\nthree")
+    expect(ctx.textarea.cursorOffset).toBe(4)
+    expect(ctx.state.mode()).toBe("normal")
+    expect(ctx.state.register()).toEqual({ text: "two", linewise: true })
+  })
+
+  test("visual D across multiple lines removes all selected lines", () => {
+    const ctx = createHandler("one\ntwo\nthree")
+    ctx.textarea.cursorOffset = 1
+
+    ctx.handler.handleKey(createEvent("v").event)
+    ctx.handler.handleKey(createEvent("j").event)
+
+    ctx.handler.handleKey(createEvent("D").event)
+    expect(ctx.textarea.plainText).toBe("three")
+    expect(ctx.textarea.cursorOffset).toBe(0)
+    expect(ctx.state.mode()).toBe("normal")
+    expect(ctx.state.register()).toEqual({ text: "one\ntwo", linewise: true })
+  })
+
+  test("visual shift+d still triggers linewise delete", () => {
+    const ctx = createHandler("one\ntwo\nthree")
+    ctx.textarea.cursorOffset = 4
+
+    ctx.handler.handleKey(createEvent("v").event)
+    ctx.handler.handleKey(createEvent("l").event)
+
+    ctx.handler.handleKey(createEvent("d", { shift: true }).event)
+    expect(ctx.textarea.plainText).toBe("one\nthree")
+    expect(ctx.state.mode()).toBe("normal")
+    expect(ctx.state.register()).toEqual({ text: "two", linewise: true })
+  })
+
+  test("visual shift+c still triggers linewise change", () => {
+    const ctx = createHandler("one two three")
+    ctx.textarea.cursorOffset = 0
+
+    ctx.handler.handleKey(createEvent("v").event)
+    ctx.handler.handleKey(createEvent("w").event)
+
+    ctx.handler.handleKey(createEvent("c", { shift: true }).event)
+    expect(ctx.textarea.plainText).toBe("")
+    expect(ctx.state.mode()).toBe("insert")
+    expect(ctx.state.register()).toEqual({ text: "one two three", linewise: true })
+  })
+
+  test("visual-line C wipes line content and enters insert", () => {
+    const ctx = createHandler("one\ntwo\nthree")
+    ctx.textarea.cursorOffset = 4
+
+    ctx.handler.handleKey(createEvent("V").event)
+
+    ctx.handler.handleKey(createEvent("C").event)
+    expect(ctx.textarea.plainText).toBe("one\n\nthree")
+    expect(ctx.textarea.cursorOffset).toBe(4)
+    expect(ctx.state.mode()).toBe("insert")
+    expect(ctx.state.register()).toEqual({ text: "two", linewise: true })
+  })
+
+  test("visual-line D removes the selected line entirely", () => {
+    const ctx = createHandler("one\ntwo\nthree")
+    ctx.textarea.cursorOffset = 4
+
+    ctx.handler.handleKey(createEvent("V").event)
+
+    ctx.handler.handleKey(createEvent("D").event)
+    expect(ctx.textarea.plainText).toBe("one\nthree")
+    expect(ctx.textarea.cursorOffset).toBe(4)
+    expect(ctx.state.mode()).toBe("normal")
+    expect(ctx.state.register()).toEqual({ text: "two", linewise: true })
+  })
+
+  test("visual D on last line removes line and trailing buffer", () => {
+    const ctx = createHandler("one\ntwo")
+    ctx.textarea.cursorOffset = 5
+
+    ctx.handler.handleKey(createEvent("v").event)
+    ctx.handler.handleKey(createEvent("l").event)
+
+    ctx.handler.handleKey(createEvent("D").event)
+    expect(ctx.textarea.plainText).toBe("one")
+    expect(ctx.textarea.cursorOffset).toBe(0)
+    expect(ctx.state.mode()).toBe("normal")
+    expect(ctx.state.register()).toEqual({ text: "two", linewise: true })
+  })
+
+  test("visual C on last line empties content and stays on line", () => {
+    const ctx = createHandler("one\ntwo")
+    ctx.textarea.cursorOffset = 5
+
+    ctx.handler.handleKey(createEvent("v").event)
+    ctx.handler.handleKey(createEvent("l").event)
+
+    ctx.handler.handleKey(createEvent("C").event)
+    expect(ctx.textarea.plainText).toBe("one\n")
+    expect(ctx.textarea.cursorOffset).toBe(4)
+    expect(ctx.state.mode()).toBe("insert")
+    expect(ctx.state.register()).toEqual({ text: "two", linewise: true })
   })
 
   test("visual x is same as d", () => {

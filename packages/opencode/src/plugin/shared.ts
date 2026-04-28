@@ -2,7 +2,7 @@ import path from "path"
 import { fileURLToPath, pathToFileURL } from "url"
 import npa from "npm-package-arg"
 import semver from "semver"
-import { Filesystem } from "@/util"
+import { Filesystem } from "@/util/filesystem"
 import { isRecord } from "@/util/record"
 import { Npm } from "@opencode-ai/core/npm"
 
@@ -172,7 +172,7 @@ export function isPathPluginSpec(spec: string) {
   return spec.startsWith("file://") || spec.startsWith(".") || isAbsolutePath(spec)
 }
 
-export async function resolvePathPluginTarget(spec: string) {
+export async function resolvePathPluginTarget(spec: string, kind: PluginKind = "server") {
   const raw = spec.startsWith("file://") ? fileURLToPath(spec) : spec
   const file = path.isAbsolute(raw) || /^[A-Za-z]:[\\/]/.test(raw) ? raw : path.resolve(raw)
   const stat = await Filesystem.statAsync(file)
@@ -182,6 +182,7 @@ export async function resolvePathPluginTarget(spec: string) {
   }
 
   if (await Filesystem.exists(path.join(file, "package.json"))) {
+    if (kind === "tui") return pathToFileURL(file).href
     const pkg = await readPluginPackage(file)
     return resolvePackageEntrypoint(spec, "server", pkg) ?? pathToFileURL(file).href
   }
@@ -205,8 +206,8 @@ export async function checkPluginCompatibility(target: string, opencodeVersion: 
   }
 }
 
-export async function resolvePluginTarget(spec: string) {
-  if (isPathPluginSpec(spec)) return resolvePathPluginTarget(spec)
+export async function resolvePluginTarget(spec: string, kind: PluginKind = "server") {
+  if (isPathPluginSpec(spec)) return resolvePathPluginTarget(spec, kind)
   const hit = parse(spec)
   const pkg = hit?.name && hit.raw === hit.name ? `${hit.name}@latest` : spec
   const result = await Npm.add(pkg)

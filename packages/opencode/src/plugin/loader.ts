@@ -77,7 +77,7 @@ export namespace PluginLoader {
     // First make sure the plugin exists locally, installing npm plugins on demand.
     let target = ""
     try {
-      target = await resolvePluginTarget(plan.spec)
+      target = await resolvePluginTarget(plan.spec, kind)
     } catch (error) {
       return { ok: false, stage: "install", error }
     }

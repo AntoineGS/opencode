@@ -2,7 +2,7 @@ import { Prompt, type PromptRef } from "@tui/component/prompt"
 import { createEffect, createMemo, createSignal, Match, Show, Switch } from "solid-js"
 import { useTheme } from "@tui/context/theme"
 import { Logo } from "../component/logo"
-import { Locale } from "@/util"
+import { Locale } from "@/util/locale"
 import { useProject } from "../context/project"
 import { useSync } from "../context/sync"
 import { Toast } from "../ui/toast"
@@ -14,7 +14,7 @@ import { Installation } from "@/installation"
 import { useLocal } from "../context/local"
 import { useKV } from "../context/kv"
 import { useCommandDialog } from "../component/dialog-command"
-import { TuiPluginRuntime } from "../plugin"
+import { TuiPluginRuntime } from "@/cli/cmd/tui/plugin/runtime"
 
 let once = false
 const placeholder = {

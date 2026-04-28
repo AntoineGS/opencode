@@ -1,7 +1,7 @@
 import { Glob } from "@opencode-ai/core/util/glob"
 import { Schema } from "effect"
 import { pathToFileURL } from "url"
-import { isPathPluginSpec, parsePluginSpecifier, resolvePathPluginTarget } from "@/plugin/shared"
+import { isPathPluginSpec, parsePluginSpecifier, resolvePathPluginTarget, type PluginKind } from "@/plugin/shared"
 import { zod } from "@/util/effect-zod"
 import { withStatics } from "@/util/schema"
 import path from "path"
@@ -51,7 +51,7 @@ export function pluginOptions(plugin: Spec): Options | undefined {
 
 // Path-like specs are resolved relative to the config file that declared them so merges later on do not
 // accidentally reinterpret `./plugin.ts` relative to some other directory.
-export async function resolvePluginSpec(plugin: Spec, configFilepath: string): Promise<Spec> {
+export async function resolvePluginSpec(plugin: Spec, configFilepath: string, kind: PluginKind = "server"): Promise<Spec> {
   const spec = pluginSpecifier(plugin)
   if (!isPathPluginSpec(spec)) return plugin
 
@@ -62,7 +62,7 @@ export async function resolvePluginSpec(plugin: Spec, configFilepath: string): P
     return pathToFileURL(path.resolve(base, spec)).href
   })()
 
-  const resolved = await resolvePathPluginTarget(file).catch(() => file)
+  const resolved = await resolvePathPluginTarget(file, kind).catch(() => file)
 
   if (Array.isArray(plugin)) return [resolved, plugin[1]]
   return resolved

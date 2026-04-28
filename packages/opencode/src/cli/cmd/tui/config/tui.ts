@@ -16,7 +16,8 @@ import { ConfigPlugin } from "@/config/plugin"
 import { ConfigKeybinds } from "@/config/keybinds"
 import { InstallationLocal, InstallationVersion } from "@opencode-ai/core/installation/version"
 import { makeRuntime } from "@opencode-ai/core/effect/runtime"
-import { Filesystem, Log } from "@/util"
+import { Filesystem } from "@/util/filesystem"
+import * as Log from "@opencode-ai/core/util/log"
 import { ConfigVariable } from "@/config/variable"
 import { Npm } from "@opencode-ai/core/npm"
 
@@ -70,7 +71,7 @@ function normalize(raw: Record<string, unknown>) {
 async function resolvePlugins(config: Info, configFilepath: string) {
   if (!config.plugin) return config
   for (let i = 0; i < config.plugin.length; i++) {
-    config.plugin[i] = await ConfigPlugin.resolvePluginSpec(config.plugin[i], configFilepath)
+    config.plugin[i] = await ConfigPlugin.resolvePluginSpec(config.plugin[i], configFilepath, "tui")
   }
   return config
 }

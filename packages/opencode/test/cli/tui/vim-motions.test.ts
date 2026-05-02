@@ -189,6 +189,7 @@ function createHandler(
   const copyVisualCalls: Array<"char" | "line"> = []
   const copyScrollCalls: Array<"center" | "top" | "bottom"> = []
   let copyYanks = 0
+  let copyYankLines = 0
   let copyCopies = 0
   let copyExitVisuals = 0
 
@@ -309,6 +310,10 @@ function createHandler(
       copyYanks++
       state.setRegister({ text: options?.copy?.text ?? "picked", linewise: false })
     },
+    copyYankLine() {
+      copyYankLines++
+      state.setRegister({ text: options?.copy?.text ?? "picked line", linewise: false })
+    },
     copyCopy() {
       copyCopies++
     },
@@ -399,6 +404,7 @@ function createHandler(
     copyVisualCalls,
     copyScrollCalls,
     copyYanks: () => copyYanks,
+    copyYankLines: () => copyYankLines,
     copyCopies: () => copyCopies,
     copyExitVisuals: () => copyExitVisuals,
     copyCol,
@@ -4802,6 +4808,43 @@ describe("copy mode", () => {
     expect(ctx.copyCopies()).toBe(0)
     expect(ctx.state.register()).toEqual({ text: "picked text", linewise: false })
     expect(ctx.state.mode()).toBe("normal")
+  })
+
+  test("yy yanks current line and exits copy mode", async () => {
+    const ctx = createHandler("abc", { mode: "copy", copy: { text: "picked line" } })
+
+    const first = createEvent("y")
+    expect(ctx.handler.handleKey(first.event)).toBe(true)
+    expect(first.prevented()).toBe(true)
+    expect(ctx.copyYankLines()).toBe(0)
+    expect(ctx.state.pending()).toBe("y")
+
+    const second = createEvent("y")
+    expect(ctx.handler.handleKey(second.event)).toBe(true)
+    expect(second.prevented()).toBe(true)
+    expect(ctx.copyYankLines()).toBe(1)
+    expect(ctx.copyYanks()).toBe(0)
+    expect(ctx.copyCopies()).toBe(0)
+    expect(ctx.state.register()).toEqual({ text: "picked line", linewise: false })
+    expect(ctx.state.pending()).toBe("")
+
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(ctx.state.mode()).toBe("normal")
+  })
+
+  test("y H y in copy mode should not trigger yy", () => {
+    const ctx = createHandler("abc", { mode: "copy" })
+
+    ctx.handler.handleKey(createEvent("y").event)
+    expect(ctx.state.pending()).toBe("y")
+
+    ctx.handler.handleKey(createEvent("H").event)
+    expect(ctx.state.pending()).toBe("")
+    expect(ctx.copyJumps).toContain("high")
+
+    ctx.handler.handleKey(createEvent("y").event)
+    expect(ctx.state.pending()).toBe("y")
+    expect(ctx.copyYankLines()).toBe(0)
   })
 
   test("return copies selection to clipboard path and exits copy mode", () => {

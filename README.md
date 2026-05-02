@@ -93,7 +93,7 @@ Works similarly to tmux copy mode within opencode tui.
 - Enter copy mode with `<leader>v`.
 - Navigate with `h` `j` `k` `l` or arrow keys (`Left` `Down` `Up` `Right`).
 - Press `v` / `V` to start character-wise or line-wise selection.
-- `y` yanks to the vim register.
+- `y/yy` yanks to the vim register.
 - `Enter` copies to the system clipboard.
 - `Escape` exits visual mode, `q` exits copy mode.
 - `z` `zt` `zz` `zb` adjust copy-mode scroll positioning.

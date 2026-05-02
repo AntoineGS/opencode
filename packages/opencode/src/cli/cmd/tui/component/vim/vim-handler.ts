@@ -85,7 +85,9 @@ export function createVimHandler(input: {
   copy?: (action: VimCopyMove) => void
   copyVisual?: (mode: "char" | "line") => void
   copyExitVisual?: () => void
+  copyExit?: () => void
   copyYank?: () => void
+  copyYankLine?: () => void
   copyCopy?: () => void
   copyIsVisual?: () => boolean
   copyJump?: (action: VimJump) => void
@@ -972,6 +974,39 @@ export function createVimHandler(input: {
   }
 
   function copy(event: VimEvent, key: string): boolean {
+    if (key === "y") {
+      if (input.copyIsVisual?.()) {
+        input.copyYank?.()
+        input.state.setMode("normal")
+        event.preventDefault()
+        return true
+      }
+      if (input.state.pending() === "y") {
+        input.state.clearPending()
+        input.copyYankLine?.()
+        setTimeout(() => {
+          input.state.setMode("normal")
+          input.copyExit?.()
+        }, 70)
+        event.preventDefault()
+        return true
+      }
+      input.state.setPending("y")
+      event.preventDefault()
+      return true
+    }
+
+    const pending = input.state.pending()
+    if (pending === "y") {
+      input.state.clearPending()
+    }
+
+    if (key === "return") {
+      input.copyCopy?.()
+      input.state.setMode("normal")
+      event.preventDefault()
+      return true
+    }
     if (key === "q") {
       input.state.setMode("normal")
       event.preventDefault()
@@ -1035,21 +1070,6 @@ export function createVimHandler(input: {
       return true
     }
 
-    if (key === "y") {
-      input.copyYank?.()
-      input.state.setMode("normal")
-      event.preventDefault()
-      return true
-    }
-
-    if (key === "return") {
-      input.copyCopy?.()
-      input.state.setMode("normal")
-      event.preventDefault()
-      return true
-    }
-
-    const pending = input.state.pending()
     if (pending === "f" || pending === "F" || pending === "t" || pending === "T") {
       if (key.length === 1) {
         const forward = pending === "f" || pending === "t"

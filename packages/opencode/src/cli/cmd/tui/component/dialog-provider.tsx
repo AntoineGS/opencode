@@ -51,11 +51,11 @@ export function createDialogProviderOptions() {
           }[provider.id],
           footer: consoleManaged ? sync.data.console_state.activeOrgName : undefined,
           category: provider.id in PROVIDER_PRIORITY ? "Popular" : "Other",
-          gutter: consoleManaged ? (
-            <text fg={theme.textMuted}>{CONSOLE_MANAGED_ICON}</text>
-          ) : connected && onboarded() ? (
-            <text fg={theme.success}>✓</text>
-          ) : undefined,
+          gutter: consoleManaged
+            ? () => <text fg={theme.textMuted}>{CONSOLE_MANAGED_ICON}</text>
+            : connected && onboarded()
+              ? () => <text fg={theme.success}>✓</text>
+              : undefined,
           async onSelect() {
             if (consoleManaged) return
 

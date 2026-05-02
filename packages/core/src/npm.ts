@@ -162,7 +162,7 @@ export const layer = Layer.effect(
       const name = parsed?.name ?? pkg
       const target = path.join(dir, "node_modules", name)
 
-      if (yield* afs.existsSafe(dir)) {
+      if (yield* afs.existsSafe(target)) {
         if (parsed?.type !== "tag" || parsed.rawSpec !== "latest") return resolveEntryPoint(name, target)
         const json = yield* afs.readJson(path.join(target, "package.json")).pipe(Effect.option)
         if (Option.isSome(json) && json.value && typeof json.value === "object" && "version" in json.value) {
@@ -195,7 +195,11 @@ export const layer = Layer.effect(
 
       const tree = yield* reify({ dir, add: [pkg] })
       const first = tree.edgesOut.values().next().value?.to
-      if (!first) return yield* new InstallFailedError({ add: [pkg], dir })
+      if (!first) {
+        const result = resolveEntryPoint(name, path.join(dir, "node_modules", name))
+        if (Option.isSome(result.entrypoint)) return result
+        return yield* new InstallFailedError({ add: [pkg], dir })
+      }
       return resolveEntryPoint(first.name, first.path)
     }, Effect.scoped)
 

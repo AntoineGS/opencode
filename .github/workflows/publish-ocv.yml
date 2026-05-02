@@ -18,7 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ocv
+          ref: ${{ github.sha }}
           fetch-depth: 0
 
       - name: Validate version
@@ -135,6 +135,7 @@ jobs:
               --title "v$VERSION" \
               --notes-file "$NOTES_FILE" \
               --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
               "$DIST"/*
           fi
         env:

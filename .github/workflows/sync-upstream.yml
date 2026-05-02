@@ -27,6 +27,42 @@ jobs:
           git fetch upstream dev
           git merge --no-edit upstream/dev
 
+      - name: Bump ocv track for ocv changes
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_PAT }}
+        run: |
+          previous=$(gh release list --repo ${{ github.repository }} --limit 200 --json tagName -q 'map(.tagName | select(test("^v[0-9]+\\.[0-9]+\\.[0-9]+-ocv\\.[0-9]+\\.[0-9]+$"))) | .[0] // ""')
+          if [ -z "$previous" ]; then
+            echo "No previous ocv release found, skipping track bump"
+            exit 0
+          fi
+          git rev-parse --verify --quiet "$previous^{commit}" >/dev/null || git fetch origin "refs/tags/$previous:refs/tags/$previous"
+
+          track=$(tr -d '[:space:]' < .github/ocv-track)
+          if ! printf '%s' "$track" | grep -Eq '^[0-9]+\.[0-9]+$'; then
+            echo "Invalid ocv track: '$track'"
+            exit 1
+          fi
+
+          previous_track="${previous##*-ocv.}"
+          if [ "$track" != "$previous_track" ]; then
+            echo "ocv track is already bumped from $previous_track to $track"
+            exit 0
+          fi
+
+          changes=$(git log --first-parent --format='%H %s' "$previous"..HEAD | grep -Ev "^[0-9a-f]+ Merge remote-tracking branch 'upstream/dev' into ocv$" || true)
+          if [ -z "$changes" ]; then
+            echo "No ocv changes since $previous"
+            exit 0
+          fi
+
+          next="${track%.*}.$((10#${track#*.} + 1))"
+          printf '%s\n' "$next" > .github/ocv-track
+          git add .github/ocv-track
+          git commit -m "release: bump ocv-track"
+          echo "Bumped ocv track from $track to $next for changes since $previous:"
+          printf '%s\n' "$changes"
+
       - name: Push
         run: git push origin ocv
 

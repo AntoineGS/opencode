@@ -27,7 +27,7 @@ jobs:
           git fetch upstream dev
           git merge --no-edit upstream/dev
 
-      - name: Bump ocv track for ocv changes
+      - name: Bump ocv track for ocv PRs
         env:
           GH_TOKEN: ${{ secrets.SYNC_PAT }}
         run: |
@@ -50,9 +50,13 @@ jobs:
             exit 0
           fi
 
-          changes=$(git log --first-parent --format='%H %s' "$previous"..HEAD | grep -Ev "^[0-9a-f]+ Merge remote-tracking branch 'upstream/dev' into ocv$" || true)
-          if [ -z "$changes" ]; then
-            echo "No ocv changes since $previous"
+          prs=$(mktemp)
+          git log --first-parent --reverse --format='%H' "$previous"..HEAD | while read -r sha; do
+            gh api "repos/${{ github.repository }}/commits/$sha/pulls" -q '.[] | select(.base.ref == "ocv") | "#\(.number) \(.title)"' || true
+          done | awk '!seen[$1]++' > "$prs"
+
+          if [ ! -s "$prs" ]; then
+            echo "No ocv PRs merged since $previous"
             exit 0
           fi
 
@@ -60,8 +64,8 @@ jobs:
           printf '%s\n' "$next" > .github/ocv-track
           git add .github/ocv-track
           git commit -m "release: bump ocv-track"
-          echo "Bumped ocv track from $track to $next for changes since $previous:"
-          printf '%s\n' "$changes"
+          echo "Bumped ocv track from $track to $next for ocv PRs merged since $previous:"
+          cat "$prs"
 
       - name: Push
         run: git push origin ocv

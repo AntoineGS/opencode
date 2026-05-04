@@ -51,7 +51,7 @@ jobs:
           fi
 
           prs=$(mktemp)
-          git fetch origin ocv
+          git fetch origin ocv:refs/remotes/origin/ocv
           scan_ref=$(git rev-parse --verify --quiet origin/ocv >/dev/null && printf origin/ocv || printf HEAD)
           git log --first-parent --reverse --format='%H' "$previous..$scan_ref" | while read -r sha; do
             pull_requests=$(gh api "repos/${{ github.repository }}/commits/$sha/pulls" -q '.[] | select(.base.ref == "ocv") | "#\(.number) \(.title)"' 2>/dev/null || true)

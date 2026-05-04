@@ -7,10 +7,18 @@ body:
     attributes:
       value: |
         Check [planned features](https://github.com/leohenon/opencode-vim/issues/5) first. If your request is already listed, comment there instead.
+  - type: checkboxes
+    id: verified
+    attributes:
+      label: Feature hasn't been suggested before.
+      options:
+        - label: I have verified this feature I'm about to request hasn't been suggested before.
+          required: true
   - type: textarea
     id: description
     attributes:
       label: Description
+      description: What do you want to change or add? What are the benefits?
       placeholder: What do you want to see?
     validations:
       required: true

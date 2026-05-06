@@ -1,5 +1,5 @@
 import { Prompt, type PromptRef } from "@tui/component/prompt"
-import { createEffect, createMemo, createSignal, Match, Show, Switch } from "solid-js"
+import { createEffect, createMemo, createSignal, Match, onMount, Show, Switch } from "solid-js"
 import { useTheme } from "@tui/context/theme"
 import { Logo } from "../component/logo"
 import { Locale } from "@/util/locale"
@@ -15,6 +15,7 @@ import { useLocal } from "../context/local"
 import { useKV } from "../context/kv"
 import { useCommandDialog } from "../component/dialog-command"
 import { TuiPluginRuntime } from "@/cli/cmd/tui/plugin/runtime"
+import { useEditorContext } from "@tui/context/editor"
 
 let once = false
 const placeholder = {
@@ -82,7 +83,12 @@ export function Home() {
   const [ref, setRef] = createSignal<PromptRef | undefined>()
   const args = useArgs()
   const local = useLocal()
+  const editor = useEditorContext()
   let sent = false
+
+  onMount(() => {
+    editor.clearSelection()
+  })
 
   const bind = (r: PromptRef | undefined) => {
     setRef(r)

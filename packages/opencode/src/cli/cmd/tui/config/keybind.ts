@@ -64,6 +64,7 @@ const Definitions = {
 
   session_export: keybind("<leader>x", "Export session to editor"),
   session_copy: keybind("none", "Copy session transcript"),
+  copy_mode: keybind("<leader>v", "Enter copy mode"),
   session_new: keybind("<leader>n", "Create a new session"),
   session_list: keybind("<leader>l", "List all sessions"),
   session_timeline: keybind("<leader>g", "Show session timeline"),
@@ -117,6 +118,7 @@ const Definitions = {
   display_thinking: keybind("none", "Toggle thinking blocks visibility"),
 
   prompt_submit: keybind("none", "Submit prompt"),
+  prompt_copy_selection: keybind("<leader>y", "Copy prompt selection"),
   prompt_editor_context_clear: keybind("none", "Clear editor context"),
   prompt_skills: keybind("none", "Open skill selector"),
   prompt_stash: keybind("none", "Stash prompt"),
@@ -241,6 +243,7 @@ export const CommandMap = {
   status_view: "opencode.status",
   session_export: "session.export",
   session_copy: "session.copy",
+  copy_mode: "session.copy_mode",
   session_new: "session.new",
   session_list: "session.list",
   session_timeline: "session.timeline",
@@ -291,6 +294,7 @@ export const CommandMap = {
   tool_details: "session.toggle.actions",
   display_thinking: "session.toggle.thinking",
   prompt_submit: "prompt.submit",
+  prompt_copy_selection: "prompt.copy_selection",
   prompt_editor_context_clear: "prompt.editor_context.clear",
   prompt_skills: "prompt.skills",
   prompt_stash: "prompt.stash",

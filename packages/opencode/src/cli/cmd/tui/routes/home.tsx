@@ -13,7 +13,6 @@ import { usePromptRef } from "../context/prompt"
 import { Installation } from "@/installation"
 import { useLocal } from "../context/local"
 import { useKV } from "../context/kv"
-import { useCommandDialog } from "../component/dialog-command"
 import { TuiPluginRuntime } from "@/cli/cmd/tui/plugin/runtime"
 import { useEditorContext } from "@tui/context/editor"
 
@@ -30,7 +29,6 @@ export function Home() {
   const project = useProject()
   const route = useRouteData("home")
   const promptRef = usePromptRef()
-  const command = useCommandDialog()
   const mcp = createMemo(() => Object.keys(sync.data.mcp).length > 0)
   const mcpError = createMemo(() => {
     return Object.values(sync.data.mcp).some((x) => x.status === "failed")
@@ -50,18 +48,6 @@ export function Home() {
     return !tipsHidden()
   })
 
-  command.register(() => [
-    {
-      title: tipsHidden() ? "Show tips" : "Hide tips",
-      value: "tips.toggle",
-      keybind: "tips_toggle",
-      category: "System",
-      onSelect: (dialog) => {
-        kv.set("tips_hidden", !tipsHidden())
-        dialog.clear()
-      },
-    },
-  ])
   const Hint = (
     <box flexShrink={0} flexDirection="row" gap={1}>
       <Show when={connectedMcpCount() > 0}>

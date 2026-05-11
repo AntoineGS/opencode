@@ -483,13 +483,13 @@ test("keybinds accept OpenTUI binding specs", async () => {
 test("defaults copy mode to leader v", async () => {
   await using tmp = await tmpdir()
   const config = await getTuiConfig(tmp.path)
-  expect(config.keybinds?.copy_mode).toBe("<leader>v")
+  expect(config.keybinds.get("session.copy_mode")?.[0]?.key).toBe("<leader>v")
 })
 
 test("defaults prompt copy selection to leader y", async () => {
   await using tmp = await tmpdir()
   const config = await getTuiConfig(tmp.path)
-  expect(config.keybinds?.prompt_copy_selection).toBe("<leader>y")
+  expect(config.keybinds.get("prompt.copy_selection")?.[0]?.key).toBe("<leader>y")
 })
 
 wintest("defaults Ctrl+Z to input undo on Windows", async () => {

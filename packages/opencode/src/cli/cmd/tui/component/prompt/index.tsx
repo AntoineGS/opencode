@@ -261,10 +261,6 @@ export function Prompt(props: PromptProps) {
   const [warpNotice, setWarpNotice] = createSignal<string>()
 
   const [cursorVersion, setCursorVersion] = createSignal(0)
-  const currentProviderLabel = createMemo(() => local.model.parsed().provider)
-  const hasRightContent = createMemo(() => Boolean(props.right))
-  const defaultWorkspaceID = createMemo(() => props.workspaceID ?? project.workspace.current())
-
 
   function selectWorkspace(selection: WorkspaceSelection | undefined) {
     setWorkspaceSelection(selection)
@@ -1025,11 +1021,10 @@ export function Prompt(props: PromptProps) {
       },
       {
         title: "Copy mode",
-        value: "session.copy_mode",
-        keybind: "copy_mode",
+        name: "session.copy_mode",
         category: "Session",
         hidden: true,
-        onSelect: (dialog) => {
+        run: () => {
           if (!vimEnabled() || !props.copy) return
           if (vimState.isCopy()) {
             vimState.setMode("normal")
@@ -1098,11 +1093,13 @@ export function Prompt(props: PromptProps) {
     bindings: tuiConfig.keybinds.gather("prompt.palette", [
       "prompt.submit",
       "prompt.editor",
+      "prompt.copy_selection",
       "prompt.editor_context.clear",
       "prompt.stash",
       "prompt.stash.pop",
       "prompt.stash.list",
       "session.interrupt",
+      "session.copy_mode",
       "workspace.set",
     ]),
   }))

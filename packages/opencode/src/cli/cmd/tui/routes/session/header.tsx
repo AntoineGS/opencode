@@ -5,12 +5,12 @@ import { pipe, sumBy } from "remeda"
 import { useTheme } from "@tui/context/theme"
 import { SplitBorder } from "@tui/component/border"
 import type { AssistantMessage, Session } from "@opencode-ai/sdk/v2"
-import { useCommandDialog } from "@tui/component/dialog-command"
-import { useKeybind } from "../../context/keybind"
 import { useKV } from "../../context/kv"
 import { useProject } from "../../context/project"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { useTerminalDimensions } from "@opentui/solid"
+import { useCommandPalette } from "../../context/command-palette"
+import { useCommandShortcut } from "../../keymap"
 
 const Title = (props: { session: Accessor<Session> }) => {
   const { theme } = useTheme()
@@ -83,10 +83,12 @@ export function Header() {
   })
 
   const { theme } = useTheme()
-  const keybind = useKeybind()
   const kv = useKV()
   const mini = createMemo(() => kv.get("ui_minimal", false))
-  const command = useCommandDialog()
+  const command = useCommandPalette()
+  const parentShortcut = useCommandShortcut("session.parent")
+  const previousShortcut = useCommandShortcut("session.child.previous")
+  const nextShortcut = useCommandShortcut("session.child.next")
   const [hover, setHover] = createSignal<"parent" | "prev" | "next" | null>(null)
   const dimensions = useTerminalDimensions()
   const narrow = createMemo(() => dimensions().width < 80)
@@ -127,39 +129,39 @@ export function Header() {
                 <box
                   onMouseOver={() => setHover("parent")}
                   onMouseOut={() => setHover(null)}
-                  onMouseUp={() => command.trigger("session.parent")}
+                  onMouseUp={() => command.run("session.parent")}
                   backgroundColor={hover() === "parent" ? theme.backgroundElement : theme.backgroundPanel}
                 >
                   <text fg={theme.text}>
                     Parent
                     <Show when={!mini()}>
-                      <span style={{ fg: theme.textMuted }}> {keybind.print("session_parent")}</span>
+                      <span style={{ fg: theme.textMuted }}> {parentShortcut()}</span>
                     </Show>
                   </text>
                 </box>
                 <box
                   onMouseOver={() => setHover("prev")}
                   onMouseOut={() => setHover(null)}
-                  onMouseUp={() => command.trigger("session.child.previous")}
+                  onMouseUp={() => command.run("session.child.previous")}
                   backgroundColor={hover() === "prev" ? theme.backgroundElement : theme.backgroundPanel}
                 >
                   <text fg={theme.text}>
                     Prev
                     <Show when={!mini()}>
-                      <span style={{ fg: theme.textMuted }}> {keybind.print("session_child_cycle_reverse")}</span>
+                      <span style={{ fg: theme.textMuted }}> {previousShortcut()}</span>
                     </Show>
                   </text>
                 </box>
                 <box
                   onMouseOver={() => setHover("next")}
                   onMouseOut={() => setHover(null)}
-                  onMouseUp={() => command.trigger("session.child.next")}
+                  onMouseUp={() => command.run("session.child.next")}
                   backgroundColor={hover() === "next" ? theme.backgroundElement : theme.backgroundPanel}
                 >
                   <text fg={theme.text}>
                     Next
                     <Show when={!mini()}>
-                      <span style={{ fg: theme.textMuted }}> {keybind.print("session_child_cycle")}</span>
+                      <span style={{ fg: theme.textMuted }}> {nextShortcut()}</span>
                     </Show>
                   </text>
                 </box>

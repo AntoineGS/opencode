@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, type Accessor } from "solid-js"
+import { batch, createEffect, createMemo, createSignal, type Accessor } from "solid-js"
 import type { ScrollBoxRenderable } from "@opentui/core"
 import type { Part } from "@opencode-ai/sdk/v2"
 import {
@@ -66,7 +66,9 @@ export function createCopyMode(input: {
   toBottom: () => void
 }) {
   const [state, setState] = createSignal<CopyState>({ ...empty })
+  const [unified, setUnified] = createSignal(false)
   const [yankLineFlash, setYankLineFlash] = createSignal<number | undefined>(undefined)
+  let lastCursor: CopyRow | undefined
 
   // --- row building ---
 
@@ -296,6 +298,65 @@ export function createCopyMode(input: {
     setState((s) => ({ ...s, stick }))
   }
 
+  // --- scroll compensation ---
+
+  let compensateTimer: ReturnType<typeof setTimeout> | undefined
+
+  function snapshotScroll() {
+    const scr = input.scroll()
+    if (!scr) return undefined
+    const scrollY = scr.scrollTop ?? scr.y ?? 0
+    const atBottom = scr.scrollHeight > scr.height && scrollY + scr.height >= scr.scrollHeight - 1
+    const children = scr.getChildren().toSorted((a, b) => a.y - b.y)
+    const ref = children.find((c) => c.id && c.y + c.height > scr.y)
+    if (!ref?.id) return undefined
+    return { id: ref.id, childY: ref.y, scrollY, atBottom }
+  }
+
+  function compensateScroll(snap: ReturnType<typeof snapshotScroll>, afterSettle?: () => void, fast = false) {
+    if (compensateTimer) clearTimeout(compensateTimer)
+    if (!snap) {
+      afterSettle?.()
+      return
+    }
+
+    const tryCompensate = () => {
+      const scr = input.scroll()
+      if (!scr || scr.isDestroyed) return false
+      const child = scr.getChildren().find((c) => c.id === snap.id)
+      if (!child) return false
+      const oldAbsolute = snap.scrollY + snap.childY
+      const newAbsolute = (scr.scrollTop ?? scr.y ?? 0) + child.y
+      const contentDelta = newAbsolute - oldAbsolute
+      const cappedDelta = Math.max(-scr.height, Math.min(scr.height, contentDelta))
+      if (contentDelta !== 0) {
+        if (snap.atBottom) {
+          if (typeof scr.scrollTo === "function") scr.scrollTo(scr.scrollHeight)
+          else scr.scrollBy(scr.scrollHeight - (scr.scrollTop ?? scr.y ?? 0))
+        } else if (typeof scr.scrollTo === "function") scr.scrollTo(snap.scrollY + cappedDelta)
+        else scr.scrollBy(cappedDelta)
+      }
+      return true
+    }
+
+    let attempts = 0
+    let settled = false
+    const poll = () => {
+      attempts++
+      const compensated = tryCompensate()
+      if (compensated && !settled && attempts >= 2) {
+        settled = true
+        afterSettle?.()
+      }
+      if (attempts >= 10) {
+        if (!settled) afterSettle?.()
+        return
+      }
+      compensateTimer = setTimeout(poll, fast && attempts < 4 ? 4 : 16)
+    }
+    compensateTimer = setTimeout(poll, 0)
+  }
+
   // --- navigation ---
 
   function sync(next: number) {
@@ -321,11 +382,44 @@ export function createCopyMode(input: {
     }
   }
 
-  function enterTarget(list: CopyRow[]) {
+  function pickVisibleTarget(list: CopyRow[], preferBottom = false) {
+    const scr = input.scroll()
+    const top = scr.y
+    const bottom = scr.y + scr.height - 1
+    const visible = list.filter((x) => x.y >= top && x.y <= bottom)
+    if (!visible.length) return 0
+    if (preferBottom) return list.indexOf(visible[visible.length - 1]!)
+    const midY = top + (bottom - top) / 2
+    return list.indexOf(visible.reduce((a, b) => (Math.abs(a.y - midY) < Math.abs(b.y - midY) ? a : b)))
+  }
+
+  function hasVisibleRow(row?: CopyRow) {
+    if (!row) return false
+    const scr = input.scroll()
+    const top = scr.y
+    const bottom = scr.y + scr.height - 1
+    return row.y >= top && row.y <= bottom
+  }
+
+  function matchingTarget(list: CopyRow[], target: CopyRow) {
+    const exact = list.map((row, idx) => ({ row, idx })).filter((x) => x.row.key === target.key)
+    if (exact.length) return exact.reduce((a, b) => (Math.abs(a.row.y - target.y) < Math.abs(b.row.y - target.y) ? a : b)).idx
+    const candidates = list
+      .map((row, idx) => ({ row, idx }))
+      .filter((x) => x.row.id === target.id && x.row.kind === target.kind && x.row.role === target.role)
+    if (!candidates.length) return -1
+    return candidates.reduce((a, b) => (Math.abs(a.row.line - target.line) < Math.abs(b.row.line - target.line) ? a : b)).idx
+  }
+
+  function enterTarget(list: CopyRow[], preferVisible = false, preferBottom = false, visibleTarget?: CopyRow) {
     const previous = state()
-    if (previous.idx < 0) {
-      const idx = list.findLastIndex((x) => x.role === "assistant")
-      const target = idx >= 0 ? idx : list.length - 1
+    if (visibleTarget) {
+      const idx = matchingTarget(list, visibleTarget)
+      const row = list[idx]
+      if (row) return { idx, col: copyMin(row), stick: "first" as const }
+    }
+    if (preferVisible || previous.idx < 0) {
+      const target = pickVisibleTarget(list, preferBottom)
       const row = list[target]
       if (!row) return
       return { idx: target, col: copyMin(row), stick: "first" as const }
@@ -345,33 +439,84 @@ export function createCopyMode(input: {
 
   function enter() {
     const init = () => {
-      const list = rows()
-      if (!list.length) return false
-      const target = enterTarget(list)
-      if (!target) return false
-      setState((s) => ({
-        ...s,
-        col: target.col,
-        stick: target.stick,
-        visual: undefined,
-        anchor: undefined,
-      }))
-      sync(target.idx)
-      return true
+      const beforeRows = rows()
+      const previousTarget = lastCursor
+      const initial = state().idx < 0 && !previousTarget
+      const previousVisible = previousTarget
+        ? hasVisibleRow(beforeRows[matchingTarget(beforeRows, previousTarget)])
+        : hasVisibleRow(beforeRows[state().idx])
+      const preEnterTarget = (preferBottom = false) => beforeRows[pickVisibleTarget(beforeRows, preferBottom)]
+      const selectTarget = (preferVisible = false, preferBottom = false, usePreEnterTarget = false, ensureVisible = true) => {
+        const list = rows()
+        if (!list.length) {
+          setState({ ...empty })
+          return false
+        }
+        const target = enterTarget(
+          list,
+          preferVisible,
+          preferBottom,
+          usePreEnterTarget && (initial || !previousVisible)
+            ? preEnterTarget(preferBottom)
+            : !preferVisible
+              ? previousTarget
+              : undefined,
+        )
+        if (!target) return false
+        setState((s) => ({
+          ...s,
+          col: target.col,
+          stick: target.stick,
+          visual: undefined,
+          anchor: undefined,
+        }))
+        if (ensureVisible) sync(target.idx)
+        else setState((s) => ({ ...s, active: true, idx: target.idx }))
+        return true
+      }
+
+      if (!unified()) {
+        const snap = snapshotScroll()
+        batch(() => {
+          setUnified(true)
+          setState((s) => ({ ...s, active: true }))
+        })
+        const preferBottom = initial && snap?.atBottom
+        selectTarget(initial || !previousVisible, preferBottom, true, false)
+        compensateScroll(snap, () => {
+          if (!selectTarget(initial || !previousVisible, preferBottom, true)) setTimeout(() => init(), 0)
+        })
+        return true
+      }
+
+      setState((s) => ({ ...s, active: true }))
+      return selectTarget(initial || !previousVisible, false, true, true)
     }
     if (init()) return
-    setTimeout(() => {
-      init()
-    }, 0)
+    setTimeout(() => init(), 0)
   }
 
-  function exit() {
-    setState({ ...empty })
+  function exit(scrollToBottom?: boolean) {
+    if (scrollToBottom === false) {
+      exitPreserveScroll()
+      return
+    }
+    lastCursor = undefined
+    batch(() => {
+      setState({ ...empty })
+      setUnified(false)
+    })
     input.toBottom()
   }
 
   function exitPreserveScroll() {
-    setState((s) => ({ ...s, active: false, visual: undefined, anchor: undefined }))
+    lastCursor = row()
+    const snap = snapshotScroll()
+    batch(() => {
+      setState((s) => ({ ...s, active: false, visual: undefined, anchor: undefined }))
+      setUnified(false)
+    })
+    compensateScroll(snap, undefined, true)
   }
 
   function focusInput() {
@@ -781,6 +926,7 @@ export function createCopyMode(input: {
     row,
     highlights,
     active: () => state().active,
+    unified,
     clamp,
     state,
     cursorText,

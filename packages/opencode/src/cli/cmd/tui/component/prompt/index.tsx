@@ -104,6 +104,7 @@ export type PromptProps = {
     wordNext: (big: boolean) => boolean
     wordPrev: (big: boolean) => boolean
     wordEnd: (big: boolean) => boolean
+    matchingBracket: () => boolean
     nextParagraph: () => boolean
     previousParagraph: () => boolean
     text: () => string
@@ -707,6 +708,9 @@ export function Prompt(props: PromptProps) {
     },
     copyWordEnd(big) {
       return props.copy?.wordEnd(big) ?? false
+    },
+    copyMatchingBracket() {
+      return props.copy?.matchingBracket() ?? false
     },
     copyNextParagraph() {
       return props.copy?.nextParagraph() ?? false

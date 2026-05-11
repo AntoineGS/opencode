@@ -1,15 +1,16 @@
 import {
   BoxRenderable,
+  RGBA,
   TextareaRenderable,
   MouseEvent,
   PasteEvent,
-  RGBA,
   TextAttributes,
   decodePasteBytes,
-  t,
-  dim,
-  fg,
+  type KeyEvent,
+  type Renderable,
 } from "@opentui/core"
+import type { CommandContext } from "@opentui/keymap"
+
 import { createEffect, createMemo, onMount, createSignal, onCleanup, on, Show, Switch, Match } from "solid-js"
 import "opentui-spinner/solid"
 import path from "path"
@@ -27,14 +28,12 @@ import { useEvent } from "@tui/context/event"
 import { editorSelectionKey, useEditorContext, type EditorSelection } from "@tui/context/editor"
 import { MessageID, PartID } from "@/session/schema"
 import { createStore, produce, unwrap } from "solid-js/store"
-import { useKeybind } from "@tui/context/keybind"
 import { usePromptHistory, type PromptInfo } from "./history"
 import { computePromptTraits } from "./traits"
 import { assign } from "./part"
 import { usePromptStash } from "./stash"
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
-import { useCommandDialog } from "../dialog-command"
 import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import * as Editor from "@tui/util/editor"
 import { useExit } from "../../context/exit"
@@ -52,7 +51,6 @@ import { DialogAlert } from "../../ui/dialog-alert"
 import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { createFadeIn } from "../../util/signal"
-import { useTextareaKeybindings } from "../textarea-keybindings"
 import { DialogSkill } from "../dialog-skill"
 import {
   confirmWorkspaceFileChanges,
@@ -71,7 +69,9 @@ import { useVimIndicator } from "../vim/vim-indicator"
 import { emptyRows } from "./empty-selection"
 import { CONSOLE_MANAGED_ICON, consoleManagedProviderLabel } from "@tui/util/provider-origin"
 import { Flag } from "@opencode-ai/core/flag/flag"
-import { WorkspaceLabel, type WorkspaceStatus } from "../workspace-label"
+import { type WorkspaceStatus } from "../workspace-label"
+import { useCommandPalette } from "../../context/command-palette"
+import { useBindings, useCommandShortcut, useLeaderActive, useOpencodeKeymap } from "../../keymap"
 
 export type PromptProps = {
   sessionID?: string
@@ -134,6 +134,8 @@ const money = new Intl.NumberFormat("en-US", {
   currency: "USD",
 })
 
+const DRAFT_RETENTION_MIN_CHARS = 20
+
 function randomIndex(count: number) {
   if (count <= 0) return 0
   return Math.floor(Math.random() * count)
@@ -174,10 +176,11 @@ let stashed: { prompt: PromptInfo; cursor: number } | undefined
 export function Prompt(props: PromptProps) {
   let input: TextareaRenderable
   let anchor: BoxRenderable
-  let autocomplete: AutocompleteRef
+  const [inputTarget, setInputTarget] = createSignal<TextareaRenderable | undefined>()
 
-  const keybind = useKeybind()
-  const cfg = useTuiConfig()
+
+  const leader = useLeaderActive()
+
   const local = useLocal()
   const args = useArgs()
   const sdk = useSDK()
@@ -185,12 +188,18 @@ export function Prompt(props: PromptProps) {
   const route = useRoute()
   const project = useProject()
   const sync = useSync()
+  const tuiConfig = useTuiConfig()
+  const cfg = tuiConfig
   const dialog = useDialog()
   const toast = useToast()
   const status = createMemo(() => sync.data.session_status?.[props.sessionID ?? ""] ?? { type: "idle" })
   const history = usePromptHistory()
   const stash = usePromptStash()
-  const command = useCommandDialog()
+  const command = useCommandPalette()
+  const keymap = useOpencodeKeymap()
+  const agentShortcut = useCommandShortcut("agent.cycle")
+  const paletteShortcut = useCommandShortcut("command.palette.show")
+  const variantShortcut = useCommandShortcut("variant.cycle")
   const renderer = useRenderer()
   const dimensions = useTerminalDimensions()
   const { theme, syntax } = useTheme()
@@ -250,6 +259,12 @@ export function Prompt(props: PromptProps) {
   const [workspaceCreating, setWorkspaceCreating] = createSignal(false)
   const [workspaceCreatingDots, setWorkspaceCreatingDots] = createSignal(3)
   const [warpNotice, setWarpNotice] = createSignal<string>()
+
+  const [cursorVersion, setCursorVersion] = createSignal(0)
+  const currentProviderLabel = createMemo(() => local.model.parsed().provider)
+  const hasRightContent = createMemo(() => Boolean(props.right))
+  const defaultWorkspaceID = createMemo(() => props.workspaceID ?? project.workspace.current())
+
 
   function selectWorkspace(selection: WorkspaceSelection | undefined) {
     setWorkspaceSelection(selection)
@@ -400,9 +415,6 @@ export function Prompt(props: PromptProps) {
     setDismissedEditorSelectionKey(editorSelectionKey(editorContext()))
     editor.clearSelection()
   }
-
-  const textareaKeybindings = useTextareaKeybindings()
-
   const fileStyleId = syntax().getStyleId("extmark.file")!
   const agentStyleId = syntax().getStyleId("extmark.agent")!
   const pasteStyleId = syntax().getStyleId("extmark.paste")!
@@ -644,12 +656,12 @@ export function Prompt(props: PromptProps) {
     setRegister: setVimRegister,
     submit,
     scroll(action) {
-      if (action === "line-down") command.trigger("session.line.down")
-      if (action === "line-up") command.trigger("session.line.up")
-      if (action === "half-down") command.trigger("session.half.page.down")
-      if (action === "half-up") command.trigger("session.half.page.up")
-      if (action === "page-down") command.trigger("session.page.down")
-      if (action === "page-up") command.trigger("session.page.up")
+      if (action === "line-down") command.run("session.line.down")
+      if (action === "line-up") command.run("session.line.up")
+      if (action === "half-down") command.run("session.half.page.down")
+      if (action === "half-up") command.run("session.half.page.up")
+      if (action === "page-down") command.run("session.page.down")
+      if (action === "page-up") command.run("session.page.up")
     },
     jump(action) {
       if (action === "high" || action === "middle" || action === "low") {
@@ -660,8 +672,8 @@ export function Prompt(props: PromptProps) {
         promptJump(action)
         return
       }
-      if (action === "top") command.trigger("session.first")
-      if (action === "bottom") command.trigger("session.last")
+      if (action === "top") command.run("session.first")
+      if (action === "bottom") command.run("session.last")
     },
     navigate(action) {
       handleNavigation(action)
@@ -740,7 +752,7 @@ export function Prompt(props: PromptProps) {
     copyScroll(action: "center" | "top" | "bottom") {
       props.copy?.scroll(action)
     },
-    autocomplete: () => autocomplete.visible,
+    autocomplete: () => auto()?.visible ?? false,
     history: () => true,
     snapshot: promptSnapshot,
     restore(next) {
@@ -810,26 +822,28 @@ export function Prompt(props: PromptProps) {
     }
   })
 
-  command.register(() => {
-    return [
+  const promptCommands = createMemo(() =>
+    [
       {
         title: "Clear prompt",
-        value: "prompt.clear",
+        name: "prompt.clear",
         category: "Prompt",
         hidden: true,
-        onSelect: (dialog) => {
-          input.extmarks.clear()
-          input.clear()
-          vimState.resetHistory()
+
+        run: () => {
+          clearPrompt()
+
           dialog.clear()
         },
       },
       {
         title: "Submit prompt",
-        value: "prompt.submit",
+
+        name: "prompt.submit",
+
         category: "Prompt",
         hidden: true,
-        onSelect: async (dialog) => {
+        run: async () => {
           if (!input.focused) return
           const handled = await submit()
           if (!handled) return
@@ -839,32 +853,32 @@ export function Prompt(props: PromptProps) {
       },
       {
         title: "Copy prompt selection",
-        value: "prompt.copy_selection",
-        keybind: "prompt_copy_selection",
+        name: "prompt.copy_selection",
         category: "Prompt",
         enabled: () => !!promptSelectionText(),
-        onSelect: async (dialog) => {
+        run: async () => {
           if (!(await copyPromptSelection())) return
           dialog.clear()
         },
       },
       {
         title: "Remove editor context",
-        value: "prompt.editor_context.clear",
+        name: "prompt.editor_context.clear",
         category: "Prompt",
         enabled: Boolean(editorContext()),
-        onSelect: (dialog) => {
+        run: () => {
           dismissEditorContext()
           dialog.clear()
         },
       },
       {
         title: "Paste",
-        value: "prompt.paste",
-        keybind: "input_paste",
+        name: "prompt.paste",
         category: "Prompt",
         hidden: true,
-        onSelect: async () => {
+        run: async (ctx: CommandContext<Renderable, KeyEvent>) => {
+          ctx.event.preventDefault()
+          ctx.event.stopPropagation()
           const content = await Clipboard.read()
           if (content?.mime.startsWith("image/")) {
             await pasteAttachment({
@@ -872,18 +886,21 @@ export function Prompt(props: PromptProps) {
               mime: content.mime,
               content: content.data,
             })
+            return
+          }
+          if (content?.mime === "text/plain") {
+            await pasteInputText(content.data)
           }
         },
       },
       {
         title: "Interrupt session",
-        value: "session.interrupt",
-        keybind: "session_interrupt",
+        name: "session.interrupt",
         category: "Session",
         hidden: true,
         enabled: status().type !== "idle",
-        onSelect: (dialog) => {
-          if (autocomplete.visible) return
+        run: () => {
+          if (auto()?.visible) return
           if (!input.focused) return
           if (vimState.isCopy()) {
             vimState.setMode("normal")
@@ -924,12 +941,9 @@ export function Prompt(props: PromptProps) {
       {
         title: "Open editor",
         category: "Session",
-        keybind: "editor_open",
-        value: "prompt.editor",
-        slash: {
-          name: "editor",
-        },
-        onSelect: async (dialog) => {
+        name: "prompt.editor",
+        slashName: "editor",
+        run: async () => {
           dialog.clear()
 
           // replace summarized text parts with the actual text
@@ -1030,12 +1044,10 @@ export function Prompt(props: PromptProps) {
       },
       {
         title: "Skills",
-        value: "prompt.skills",
+        name: "prompt.skills",
         category: "Prompt",
-        slash: {
-          name: "skills",
-        },
-        onSelect: () => {
+        slashName: "skills",
+        run: () => {
           dialog.replace(() => (
             <DialogSkill
               onSelect={(skill) => {
@@ -1053,18 +1065,17 @@ export function Prompt(props: PromptProps) {
       },
       {
         title: "Warp",
-        description: "Change the workspace for the session",
-        value: "workspace.set",
+        desc: "Change the workspace for the session",
+        name: "workspace.set",
         category: "Session",
         enabled: Flag.OPENCODE_EXPERIMENTAL_WORKSPACES,
-        slash: {
-          name: "warp",
-        },
-        onSelect: (dialog) => {
+        slashName: "warp",
+        run: () => {
           void openWorkspaceSelect({
             dialog,
             sdk,
             sync,
+            project,
             toast,
             onSelect: (selection) => {
               void warpSession(selection)
@@ -1072,8 +1083,29 @@ export function Prompt(props: PromptProps) {
           })
         },
       },
-    ]
-  })
+    ].map((entry) => ({
+      namespace: "palette",
+      ...entry,
+    })),
+  )
+
+  useBindings(() => ({
+    commands: promptCommands(),
+  }))
+
+  useBindings(() => ({
+    enabled: command.matcher,
+    bindings: tuiConfig.keybinds.gather("prompt.palette", [
+      "prompt.submit",
+      "prompt.editor",
+      "prompt.editor_context.clear",
+      "prompt.stash",
+      "prompt.stash.pop",
+      "prompt.stash.list",
+      "session.interrupt",
+      "workspace.set",
+    ]),
+  }))
 
   const ref: PromptRef = {
     get focused() {
@@ -1126,6 +1158,7 @@ export function Prompt(props: PromptProps) {
     if (store.prompt.input) {
       stashed = { prompt: unwrap(store.prompt), cursor: input.cursorOffset }
     }
+    setInputTarget(undefined)
     props.ref?.(undefined)
   })
 
@@ -1144,11 +1177,13 @@ export function Prompt(props: PromptProps) {
 
   createEffect(() => {
     if (!input || input.isDestroyed) return
-    input.traits = computePromptTraits({
-      mode: store.mode,
-      disabled: !!props.disabled,
-      autocompleteVisible: !!auto()?.visible,
-    })
+    input.traits = {
+      ...input.traits,
+      ...computePromptTraits({
+        mode: store.mode,
+        autocompleteVisible: !!auto()?.visible,
+      }),
+    }
   })
 
   function submitFromTextarea() {
@@ -1241,63 +1276,201 @@ export function Prompt(props: PromptProps) {
     )
   }
 
-  command.register(() => [
-    {
-      title: "Stash prompt",
-      value: "prompt.stash",
-      category: "Prompt",
-      enabled: !!store.prompt.input,
-      onSelect: (dialog) => {
-        if (!store.prompt.input) return
-        stash.push({
-          input: store.prompt.input,
-          parts: store.prompt.parts,
-        })
-        input.extmarks.clear()
-        input.clear()
-        setStore("prompt", { input: "", parts: [] })
-        setStore("extmarkToPartIndex", new Map())
-        vimState.resetHistory()
-        dialog.clear()
+
+  const stashCommands = createMemo(() =>
+    [
+      {
+        title: "Stash prompt",
+        name: "prompt.stash",
+        category: "Prompt",
+        enabled: !!store.prompt.input,
+        run: () => {
+          if (!store.prompt.input) return
+          stash.push({
+            input: store.prompt.input,
+            parts: store.prompt.parts,
+          })
+          input.extmarks.clear()
+          input.clear()
+          setStore("prompt", { input: "", parts: [] })
+          setStore("extmarkToPartIndex", new Map())
+          dialog.clear()
+        },
       },
-    },
-    {
-      title: "Stash pop",
-      value: "prompt.stash.pop",
-      category: "Prompt",
-      enabled: stash.list().length > 0,
-      onSelect: (dialog) => {
-        const entry = stash.pop()
-        if (entry) {
-          input.setText(entry.input)
-          setStore("prompt", { input: entry.input, parts: entry.parts })
-          restoreExtmarksFromParts(entry.parts)
-          input.gotoBufferEnd()
-          vimState.resetHistory()
-        }
-        dialog.clear()
+      {
+        title: "Stash pop",
+        name: "prompt.stash.pop",
+        category: "Prompt",
+        enabled: stash.list().length > 0,
+        run: () => {
+          const entry = stash.pop()
+          if (entry) {
+            input.setText(entry.input)
+            setStore("prompt", { input: entry.input, parts: entry.parts })
+            restoreExtmarksFromParts(entry.parts)
+            input.gotoBufferEnd()
+          }
+          dialog.clear()
+        },
       },
-    },
-    {
-      title: "Stash list",
-      value: "prompt.stash.list",
-      category: "Prompt",
-      enabled: stash.list().length > 0,
-      onSelect: (dialog) => {
-        dialog.replace(() => (
-          <DialogStash
-            onSelect={(entry) => {
-              input.setText(entry.input)
-              setStore("prompt", { input: entry.input, parts: entry.parts })
-              restoreExtmarksFromParts(entry.parts)
-              input.gotoBufferEnd()
-              vimState.resetHistory()
-            }}
-          />
-        ))
+      {
+        title: "Stash list",
+        name: "prompt.stash.list",
+        category: "Prompt",
+        enabled: stash.list().length > 0,
+        run: () => {
+          dialog.replace(() => (
+            <DialogStash
+              onSelect={(entry) => {
+                input.setText(entry.input)
+                setStore("prompt", { input: entry.input, parts: entry.parts })
+                restoreExtmarksFromParts(entry.parts)
+                input.gotoBufferEnd()
+              }}
+            />
+          ))
+        },
+
       },
-    },
-  ])
+    ].map((entry) => ({
+      namespace: "palette",
+      ...entry,
+    })),
+  )
+
+  useBindings(() => ({
+    commands: stashCommands(),
+  }))
+
+  useBindings(() => {
+    return {
+      target: inputTarget,
+      enabled: inputTarget() !== undefined && !props.disabled,
+      bindings: tuiConfig.keybinds.get("prompt.paste"),
+    }
+  })
+
+  useBindings(() => {
+    return {
+      target: inputTarget,
+      enabled: inputTarget() !== undefined && !props.disabled && store.prompt.input !== "",
+      bindings: tuiConfig.keybinds.get("prompt.clear"),
+    }
+  })
+
+  useBindings(() => {
+    return {
+      target: inputTarget,
+      enabled: (() => {
+        cursorVersion()
+        return (
+          inputTarget() !== undefined &&
+          !props.disabled &&
+          store.mode === "normal" &&
+          !auto()?.visible &&
+          input?.visualCursor.offset === 0
+        )
+      })(),
+      bindings: [
+        {
+          key: "!",
+          desc: "Shell mode",
+          group: "Prompt",
+          cmd: () => {
+            setStore("placeholder", randomIndex(shell().length))
+            setStore("mode", "shell")
+          },
+        },
+      ],
+    }
+  })
+
+  useBindings(() => {
+    return {
+      target: inputTarget,
+      enabled: inputTarget() !== undefined && store.mode === "shell",
+      bindings: [{ key: "escape", desc: "Exit shell mode", group: "Prompt", cmd: () => setStore("mode", "normal") }],
+    }
+  })
+
+  useBindings(() => {
+    return {
+      target: inputTarget,
+      enabled: (() => {
+        cursorVersion()
+        return inputTarget() !== undefined && store.mode === "shell" && input?.visualCursor.offset === 0
+      })(),
+      bindings: [{ key: "backspace", desc: "Exit shell mode", group: "Prompt", cmd: () => setStore("mode", "normal") }],
+    }
+  })
+
+  useBindings(() => {
+    return {
+      target: inputTarget,
+      enabled: (() => {
+        cursorVersion()
+        return inputTarget() !== undefined && !props.disabled && !auto()?.visible && input !== undefined
+      })(),
+      commands: [
+        {
+          name: "prompt.history.previous",
+          title: "Previous prompt history",
+          category: "Prompt",
+          run() {
+            if (input.cursorOffset !== 0) {
+              if (input.scrollY + input.visualCursor.visualRow === 0) input.cursorOffset = 0
+              return false
+            }
+
+            const item = history.move(-1, input.plainText)
+            if (!item) return false
+            input.setText(item.input)
+            setStore("prompt", item)
+            setStore("mode", item.mode ?? "normal")
+            restoreExtmarksFromParts(item.parts)
+            input.cursorOffset = 0
+          },
+        },
+      ],
+      bindings: tuiConfig.keybinds.get("prompt.history.previous"),
+    }
+  })
+
+  useBindings(() => {
+    return {
+      target: inputTarget,
+      enabled: (() => {
+        cursorVersion()
+        return inputTarget() !== undefined && !props.disabled && !auto()?.visible && input !== undefined
+      })(),
+      commands: [
+        {
+          name: "prompt.history.next",
+          title: "Next prompt history",
+          category: "Prompt",
+          run() {
+            if (input.cursorOffset !== input.plainText.length) {
+              if (
+                input.scrollY + input.visualCursor.visualRow ===
+                Math.max(0, input.editorView.getTotalVirtualLineCount() - 1)
+              )
+                input.cursorOffset = input.plainText.length
+              return false
+            }
+
+            const item = history.move(1, input.plainText)
+            if (!item) return false
+            input.setText(item.input)
+            setStore("prompt", item)
+            setStore("mode", item.mode ?? "normal")
+            restoreExtmarksFromParts(item.parts)
+            input.cursorOffset = input.plainText.length
+          },
+        },
+      ],
+      bindings: tuiConfig.keybinds.get("prompt.history.next"),
+    }
+  })
 
   async function submit() {
     setWarpNotice(undefined)
@@ -1311,7 +1484,7 @@ export function Prompt(props: PromptProps) {
     }
     if (props.disabled) return false
     if (workspaceCreating()) return false
-    if (autocomplete?.visible) return false
+    if (auto()?.visible) return false
     if (!store.prompt.input) return false
     const agent = local.agent.current()
     if (!agent) return false
@@ -1337,6 +1510,7 @@ export function Prompt(props: PromptProps) {
               dialog,
               sdk,
               sync,
+              project,
               toast,
               onSelect: (selection) => {
                 void warpSession(selection)
@@ -1562,6 +1736,66 @@ export function Prompt(props: PromptProps) {
     )
   }
 
+  async function pasteInputText(text: string) {
+    const normalizedText = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n")
+    const pastedContent = normalizedText.trim()
+    const filepath = iife(() => {
+      const raw = pastedContent.replace(/^['"]+|['"]+$/g, "")
+      if (raw.startsWith("file://")) {
+        try {
+          return fileURLToPath(raw)
+        } catch {}
+      }
+      if (process.platform === "win32") return raw
+      return raw.replace(/\\(.)/g, "$1")
+    })
+    const isUrl = /^(https?):\/\//.test(filepath)
+    if (!isUrl) {
+      try {
+        const mime = await Filesystem.mimeType(filepath)
+        const filename = path.basename(filepath)
+        if (mime === "image/svg+xml") {
+          const content = await Filesystem.readText(filepath).catch(() => {})
+          if (content) {
+            pasteText(content, `[SVG: ${filename ?? "image"}]`)
+            return
+          }
+        }
+        if (mime.startsWith("image/") || mime === "application/pdf") {
+          const content = await Filesystem.readArrayBuffer(filepath)
+            .then((buffer) => Buffer.from(buffer).toString("base64"))
+            .catch(() => {})
+          if (content) {
+            await pasteAttachment({
+              filename,
+              filepath,
+              mime,
+              content,
+            })
+            return
+          }
+        }
+      } catch {}
+    }
+
+    const lineCount = (pastedContent.match(/\n/g)?.length ?? 0) + 1
+    if (
+      (lineCount >= 3 || pastedContent.length > 150) &&
+      kv.get("paste_summary_enabled", !sync.data.config.experimental?.disable_paste_summary)
+    ) {
+      pasteText(pastedContent, `[Pasted ~${lineCount} lines]`)
+      return
+    }
+
+    input.insertText(normalizedText)
+
+    setTimeout(() => {
+      if (!input || input.isDestroyed) return
+      input.getLayoutNode().markDirty()
+      renderer.requestRender()
+    }, 0)
+  }
+
   async function pasteAttachment(file: { filename?: string; filepath?: string; content: string; mime: string }) {
     const currentOffset = input.visualCursor.offset
     const extmarkStart = currentOffset
@@ -1610,9 +1844,27 @@ export function Prompt(props: PromptProps) {
     return
   }
 
-  const dimmed = createMemo(() => keybind.leader || vimState.isCopy())
+
+  function clearPrompt() {
+    if (store.prompt.input.trim().length >= DRAFT_RETENTION_MIN_CHARS || store.prompt.parts.length > 0) {
+      history.append({
+        ...store.prompt,
+        mode: store.mode,
+      })
+    }
+    input.clear()
+    input.extmarks.clear()
+    setStore("prompt", {
+      input: "",
+      parts: [],
+    })
+    setStore("extmarkToPartIndex", new Map())
+  }
+
+  const dimmed = createMemo(() => leader() || vimState.isCopy())
   const highlight = createMemo(() => {
     if (dimmed()) return theme.border
+
     if (store.mode === "shell") return theme.primary
     const agent = local.agent.current()
     if (!agent) return theme.border
@@ -1734,30 +1986,7 @@ export function Prompt(props: PromptProps) {
 
   return (
     <>
-      <Autocomplete
-        sessionID={props.sessionID}
-        ref={(r) => {
-          autocomplete = r
-          setAuto(() => r)
-        }}
-        anchor={() => anchor}
-        input={() => input}
-        setPrompt={(cb) => {
-          setStore("prompt", produce(cb))
-        }}
-        setExtmark={(partIndex, extmarkId) => {
-          setStore("extmarkToPartIndex", (map: Map<number, number>) => {
-            const newMap = new Map(map)
-            newMap.set(extmarkId, partIndex)
-            return newMap
-          })
-        }}
-        value={store.prompt.input}
-        fileStyleId={fileStyleId}
-        agentStyleId={agentStyleId}
-        promptPartTypeId={() => promptPartTypeId}
-      />
-      <box ref={(r) => (anchor = r)} visible={props.visible !== false}>
+      <box ref={(r: BoxRenderable) => (anchor = r)} visible={props.visible !== false}>
         <box
           border={["left"]}
           borderColor={borderHighlight()}
@@ -1774,301 +2003,111 @@ export function Prompt(props: PromptProps) {
             backgroundColor={theme.backgroundElement}
             flexGrow={1}
           >
-            <box flexDirection="row">
-              <textarea
-                placeholder={placeholderText()}
-                placeholderColor={theme.textMuted}
-                textColor={dimmed() ? theme.textMuted : theme.text}
-                focusedTextColor={dimmed() ? theme.textMuted : theme.text}
-                minHeight={1}
-                maxHeight={maxHeight()}
-                flexGrow={1}
-                onCursorChange={() => syncScrollbar()}
-                onContentChange={() => {
-                  if (vimState.isCopy()) {
-                    const prev = store.prompt.input
-                    if (input.plainText !== prev) input.setText(prev)
-                    return
+
+            <textarea
+              placeholder={placeholderText()}
+              placeholderColor={theme.textMuted}
+              textColor={dimmed() ? theme.textMuted : theme.text}
+              focusedTextColor={dimmed() ? theme.textMuted : theme.text}
+              minHeight={1}
+              maxHeight={maxHeight()}
+              onContentChange={() => {
+                if (vimState.isCopy()) {
+                  const prev = store.prompt.input
+                  if (input.plainText !== prev) input.setText(prev)
+                  return
+                }
+                const value = input.plainText
+                setStore("prompt", "input", value)
+                auto()?.onInput(value)
+                syncExtmarksWithPromptParts()
+                syncScrollbar()
+                setCursorVersion((value) => value + 1)
+              }}
+              onCursorChange={() => {
+                syncScrollbar()
+                setCursorVersion((value) => value + 1)
+              }}
+              onKeyDown={async (e: KeyEvent & { preventDefault(): void; defaultPrevented?: boolean }) => {
+                if (props.disabled) {
+                  e.preventDefault()
+                  return
+                }
+                if (vimState.isCopy()) {
+                  const active = vimState.isCopy()
+                  vim.handleKey(e)
+                  if (active && vimState.mode() === "normal") {
+                    const skipExit = vimState.skipExitOnModeChange()
+                    const scrollToBottom = vimState.exitScrollToBottom()
+                    vimState.setSkipExitOnModeChange(false)
+                    vimState.setExitScrollToBottom(true)
+                    if (props.copy?.active() && !skipExit) props.copy.exit(scrollToBottom)
                   }
-                  const value = input.plainText
-                  setStore("prompt", "input", value)
-                  autocomplete.onInput(value)
-                  syncExtmarksWithPromptParts()
-                  syncScrollbar()
-                }}
-                keyBindings={textareaKeybindings()}
-                onKeyDown={async (e) => {
-                  if (props.disabled) {
+                  if (!e.defaultPrevented) e.preventDefault()
+                  return
+                }
+                if (store.mode === "shell") {
+                  if ((e.name === "backspace" && input.visualCursor.offset === 0) || e.name === "escape") {
+                    setStore("mode", "normal")
+                    vimState.clearPending()
                     e.preventDefault()
                     return
                   }
-                  if (keybind.match("input_force_submit", e)) {
-                    e.preventDefault()
-                    void submit()
-                    return
-                  }
-                  // In copy mode, forward all keys to vim handler
-                  if (vimState.isCopy()) {
-                    const active = vimState.isCopy()
-                    vim.handleKey(e)
-                    if (active && vimState.mode() === "normal") {
-                      const skipExit = vimState.skipExitOnModeChange()
-                      const scrollToBottom = vimState.exitScrollToBottom()
-                      vimState.setSkipExitOnModeChange(false)
-                      vimState.setExitScrollToBottom(true)
-                      if (props.copy?.active() && !skipExit) props.copy.exit(scrollToBottom)
-                    }
-                    if (!e.defaultPrevented) e.preventDefault()
-                    return
-                  }
-                  // Check clipboard for images before terminal-handled paste runs.
-                  // This helps terminals that forward Ctrl+V to the app; Windows
-                  // Terminal 1.25+ usually handles Ctrl+V before this path.
-                  if (keybind.match("input_paste", e)) {
-                    const content = await Clipboard.read()
-                    if (content?.mime.startsWith("image/")) {
-                      e.preventDefault()
-                      await pasteAttachment({
-                        filename: "clipboard",
-                        mime: content.mime,
-                        content: content.data,
-                      })
-                      return
-                    }
-                    // If no image, let the default paste behavior continue
-                  }
-                  if (keybind.match("input_clear", e) && store.prompt.input !== "") {
-                    input.clear()
-                    input.extmarks.clear()
-                    setStore("prompt", {
-                      input: "",
-                      parts: [],
-                    })
-                    setStore("extmarkToPartIndex", new Map())
-                    vimState.resetHistory()
-                    return
-                  }
-                  const isVimScrollOverride =
-                    vimEnabled() &&
-                    store.mode === "normal" &&
-                    (vimState.mode() === "normal" || vimState.isCopy()) &&
-                    !!vimScroll(e)
-                  if (!isVimScrollOverride && keybind.match("app_exit", e)) {
-                    if (store.prompt.input === "") {
-                      await exit()
-                      e.preventDefault()
-                      return
-                    }
-                  }
-                  if (e.name === "!" && input.visualCursor.offset === 0) {
-                    setStore("placeholder", randomIndex(shell().length))
-                    setStore("mode", "shell")
-                    e.preventDefault()
-                    return
-                  }
-                  if (store.mode === "shell") {
-                    if ((e.name === "backspace" && input.visualCursor.offset === 0) || e.name === "escape") {
-                      setStore("mode", "normal")
-                      vimState.clearPending()
-                      e.preventDefault()
-                      return
-                    }
-                  }
-                  if (store.mode === "normal") autocomplete.onKeyDown(e)
-                  if (e.defaultPrevented) return
-                  if (store.mode === "normal" && shouldSyncVimRegister(e)) {
-                    e.preventDefault()
-                    await syncVimRegisterFromClipboard()
-                    vim.handleKey(e)
-                    return
-                  }
-                  if (store.mode === "normal" && vim.handleKey(e)) return
-                  if (!autocomplete.visible) {
-                    if (
-                      (keybind.match("history_previous", e) && input.cursorOffset === 0) ||
-                      (keybind.match("history_next", e) && input.cursorOffset === input.plainText.length)
-                    ) {
-                      const direction = keybind.match("history_previous", e) ? -1 : 1
-                      const item = history.move(direction, input.plainText)
-
-                      if (item) {
-                        input.setText(item.input)
-                        setStore("prompt", item)
-                        setStore("mode", item.mode ?? "normal")
-                        restoreExtmarksFromParts(item.parts)
-                        vimState.resetHistory()
-                        e.preventDefault()
-                        if (direction === -1) input.cursorOffset = 0
-                        if (direction === 1) input.cursorOffset = input.plainText.length
-                      }
-                      return
-                    }
-
-                    if (keybind.match("history_previous", e) && input.visualCursor.visualRow === 0)
-                      input.cursorOffset = 0
-                    if (keybind.match("history_next", e) && input.visualCursor.visualRow === input.height - 1)
-                      input.cursorOffset = input.plainText.length
-                  }
-                }}
-                onSubmit={submitFromTextarea}
-                onPaste={async (event: PasteEvent) => {
-                  if (props.disabled) {
-                    event.preventDefault()
-                    return
-                  }
-
-                  // Normalize line endings at the boundary
-                  // Windows ConPTY/Terminal often sends CR-only newlines in bracketed paste
-                  // Replace CRLF first, then any remaining CR
-                  const normalizedText = decodePasteBytes(event.bytes).replace(/\r\n/g, "\n").replace(/\r/g, "\n")
-                  const pastedContent = normalizedText.trim()
-
-                  // Windows Terminal <1.25 can surface image-only clipboard as an
-                  // empty bracketed paste. Windows Terminal 1.25+ does not.
-                  if (!pastedContent) {
-                    command.trigger("prompt.paste")
-                    return
-                  }
-
-                  // Once we cross an async boundary below, the terminal may perform its
-                  // default paste unless we suppress it first and handle insertion ourselves.
+                }
+                if (store.mode === "normal" && shouldSyncVimRegister(e)) {
+                  e.preventDefault()
+                  await syncVimRegisterFromClipboard()
+                  vim.handleKey(e)
+                  return
+                }
+                if (store.mode === "normal" && vim.handleKey(e)) return
+              }}
+              onSubmit={submitFromTextarea}
+              onPaste={async (event: PasteEvent) => {
+                if (props.disabled) {
                   event.preventDefault()
+                  return
+                }
 
-                  const filepath = iife(() => {
-                    const raw = pastedContent.replace(/^['"]+|['"]+$/g, "")
-                    if (raw.startsWith("file://")) {
-                      try {
-                        return fileURLToPath(raw)
-                      } catch {}
-                    }
-                    if (process.platform === "win32") return raw
-                    return raw.replace(/\\(.)/g, "$1")
-                  })
-                  const isUrl = /^(https?):\/\//.test(filepath)
-                  if (!isUrl) {
-                    try {
-                      const mime = await Filesystem.mimeType(filepath)
-                      const filename = path.basename(filepath)
-                      if (mime === "image/svg+xml") {
-                        const content = await Filesystem.readText(filepath).catch(() => {})
-                        if (content) {
-                          pasteText(content, `[SVG: ${filename ?? "image"}]`)
-                          return
-                        }
-                      }
-                      if (mime.startsWith("image/") || mime === "application/pdf") {
-                        const content = await Filesystem.readArrayBuffer(filepath)
-                          .then((buffer) => Buffer.from(buffer).toString("base64"))
-                          .catch(() => {})
-                        if (content) {
-                          await pasteAttachment({
-                            filename,
-                            filepath,
-                            mime,
-                            content,
-                          })
-                          return
-                        }
-                      }
-                    } catch {}
-                  }
+                // Normalize line endings at the boundary
+                // Windows ConPTY/Terminal often sends CR-only newlines in bracketed paste
+                // Replace CRLF first, then any remaining CR
+                const normalizedText = decodePasteBytes(event.bytes).replace(/\r\n/g, "\n").replace(/\r/g, "\n")
+                const pastedContent = normalizedText.trim()
 
-                  const lineCount = (pastedContent.match(/\n/g)?.length ?? 0) + 1
-                  if (
-                    (lineCount >= 3 || pastedContent.length > 150) &&
-                    kv.get("paste_summary_enabled", !sync.data.config.experimental?.disable_paste_summary)
-                  ) {
-                    pasteText(pastedContent, `[Pasted ~${lineCount} lines]`)
-                    return
-                  }
+                // Windows Terminal <1.25 can surface image-only clipboard as an
+                // empty bracketed paste. Windows Terminal 1.25+ does not.
+                if (!pastedContent) {
+                  keymap.dispatchCommand("prompt.paste")
+                  return
+                }
 
-                  input.insertText(normalizedText)
+                // Once we cross an async boundary below, the terminal may perform its
+                // default paste unless we suppress it first and handle insertion ourselves.
+                event.preventDefault()
 
-                  setTimeout(() => {
-                    if (!input || input.isDestroyed) return
-                    input.getLayoutNode().markDirty()
-                    renderer.requestRender()
-                  }, 0)
-                }}
-                ref={(r: TextareaRenderable) => {
-                  input = r
-                  if (promptPartTypeId === 0) {
-                    promptPartTypeId = input.extmarks.registerType("prompt-part")
-                  }
-                  if (!(input as any)[EMPTY_RENDER]) {
-                    ;(input as any)[EMPTY_RENDER] = true
-                    const render = input.render.bind(input)
-                    input.render = (buffer, deltaTime) => {
-                      render(buffer, deltaTime)
-                      const visual = vimState.isVisual()
-                      if (visual) {
-                        const rows = emptyRows(
-                          input.plainText,
-                          input.editorView.getSelection(),
-                          input.lineInfo,
-                          input.scrollY,
-                          input.height,
-                        )
-                        if (rows.length) {
-                          const bg = input.selectionBg ?? input.textColor
-                          const fg =
-                            input.selectionFg ??
-                            (input.backgroundColor.a > 0 ? input.backgroundColor : RGBA.fromInts(0, 0, 0))
-                          rows.forEach((row) => {
-                            buffer.setCell(input.x, input.y + row, " ", fg, bg)
-                          })
-                        }
-                      }
-                      const block = !props.disabled && vimEnabled() && store.mode === "normal" && vimState.mode() === "normal"
-                      if (!(visual || block)) return
-                      if (!input.focused) return
-                      if (input.visualCursor.visualRow < 0 || input.visualCursor.visualRow >= input.height) return
-                      if (input.visualCursor.visualCol < 0 || input.visualCursor.visualCol >= input.width) return
-                      // recolor the cursor cell in place; setCell would clobber the underlying glyph
-                      const cursorOffset =
-                        ((input.y + input.visualCursor.visualRow) * buffer.width +
-                          input.x +
-                          input.visualCursor.visualCol) *
-                        4
-                      buffer.buffers.fg.set(selectedForeground(theme, theme.text).buffer.subarray(0, 4), cursorOffset)
-                      buffer.buffers.bg.set(theme.text.buffer.subarray(0, 4), cursorOffset)
-                    }
-                  }
-                  props.ref?.(ref)
-                  setTimeout(() => {
-                    // setTimeout is a workaround and needs to be addressed properly
-                    if (!input || input.isDestroyed) return
-                    input.cursorColor = props.disabled ? theme.backgroundElement : theme.text
-                    syncScrollbar()
-                  }, 0)
-                }}
-                onMouseDown={(r: MouseEvent) => r.target?.focus()}
-                focusedBackgroundColor={theme.backgroundElement}
-                cursorColor={props.disabled ? theme.backgroundElement : theme.text}
-                syntaxStyle={syntax()}
-              />
-              <Show when={showScrollbar()}>
-                <box
-                  width={1}
-                  flexShrink={0}
-                  marginLeft={1}
-                  backgroundColor={scrollbar() ? theme.backgroundPanel : theme.backgroundElement}
-                >
-                  <Show when={scrollbar()}>
-                    {(chars) => (
-                      <text>
-                        {chars().map((c, i) => (
-                          <>
-                            {i > 0 ? "\n" : ""}
-                            <span style={{ fg: c === " " ? theme.backgroundPanel : theme.border }}>{c}</span>
-                          </>
-                        ))}
-                      </text>
-                    )}
-                  </Show>
-                </box>
-              </Show>
-            </box>
+                await pasteInputText(normalizedText)
+              }}
+              ref={(r: TextareaRenderable) => {
+                input = r
+                setInputTarget(r)
+                if (promptPartTypeId === 0) {
+                  promptPartTypeId = input.extmarks.registerType("prompt-part")
+                }
+                props.ref?.(ref)
+                setTimeout(() => {
+                  // setTimeout is a workaround and needs to be addressed properly
+                  if (!input || input.isDestroyed) return
+                  input.cursorColor = props.disabled ? theme.backgroundElement : theme.text
+                  syncScrollbar()
+                }, 0)
+              }}
+              onMouseDown={(r: MouseEvent) => r.target?.focus()}
+              focusedBackgroundColor={theme.backgroundElement}
+              cursorColor={props.disabled ? theme.backgroundElement : theme.text}
+              syntaxStyle={syntax()}
+            />
+
             <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1} justifyContent="space-between">
               <box flexDirection="row" gap={1}>
                 <Show when={local.agent.current()} fallback={<box height={1} />}>
@@ -2082,7 +2121,9 @@ export function Prompt(props: PromptProps) {
                           <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>·</text>
                           <text
                             flexShrink={0}
+
                             fg={fadeColor(dimmed() ? theme.textMuted : theme.text, modelMetaAlpha())}
+
                           >
                             {local.model.parsed().model}
                           </text>
@@ -2109,7 +2150,7 @@ export function Prompt(props: PromptProps) {
                       fg={theme.textMuted}
                       onMouseUp={() => {
                         if (!canSwitchOrgs()) return
-                        command.trigger("console.org.switch")
+                        command.run("console.org.switch")
                       }}
                     >
                       {`${CONSOLE_MANAGED_ICON} ${activeOrgName()}`}
@@ -2291,7 +2332,7 @@ export function Prompt(props: PromptProps) {
                 <Match when={store.mode === "normal"}>
                   <Show when={local.model.variant.list().length > 0}>
                     <text fg={theme.text}>
-                      {keybind.print("variant_cycle")} <span style={{ fg: theme.textMuted }}>variants</span>
+                      {variantShortcut()} <span style={{ fg: theme.textMuted }}>variants</span>
                     </text>
                   </Show>
                   <Switch>
@@ -2304,12 +2345,12 @@ export function Prompt(props: PromptProps) {
                     </Match>
                     <Match when={true}>
                       <text fg={theme.text}>
-                        {keybind.print("agent_cycle")} <span style={{ fg: theme.textMuted }}>agents</span>
+                        {agentShortcut()} <span style={{ fg: theme.textMuted }}>agents</span>
                       </text>
                     </Match>
                   </Switch>
                   <text fg={theme.text}>
-                    {keybind.print("command_list")} <span style={{ fg: theme.textMuted }}>commands</span>
+                    {paletteShortcut()} <span style={{ fg: theme.textMuted }}>commands</span>
                   </text>
                 </Match>
                 <Match when={store.mode === "shell"}>
@@ -2322,6 +2363,28 @@ export function Prompt(props: PromptProps) {
           </Show>
         </box>
       </box>
+      <Autocomplete
+        sessionID={props.sessionID}
+        ref={(r) => {
+          setAuto(() => r)
+        }}
+        anchor={() => anchor}
+        input={() => input}
+        setPrompt={(cb) => {
+          setStore("prompt", produce(cb))
+        }}
+        setExtmark={(partIndex, extmarkId) => {
+          setStore("extmarkToPartIndex", (map: Map<number, number>) => {
+            const newMap = new Map(map)
+            newMap.set(extmarkId, partIndex)
+            return newMap
+          })
+        }}
+        value={store.prompt.input}
+        fileStyleId={fileStyleId}
+        agentStyleId={agentStyleId}
+        promptPartTypeId={() => promptPartTypeId}
+      />
     </>
   )
 }

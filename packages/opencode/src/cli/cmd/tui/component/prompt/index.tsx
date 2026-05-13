@@ -1157,7 +1157,7 @@ export function Prompt(props: PromptProps) {
       !!props.copy,
     bindings: [
       {
-        key: `<${VIM_WINDOW_TOKEN}>k`,
+        key: `<${VIM_WINDOW_TOKEN}>k,<${VIM_WINDOW_TOKEN}>ctrl+k`,
         desc: "Enter copy mode",
         group: "Session",
         cmd: () => {
@@ -1168,7 +1168,7 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
-        key: `<${VIM_WINDOW_TOKEN}>w,<${VIM_WINDOW_TOKEN}><${VIM_WINDOW_TOKEN}>`,
+        key: `<${VIM_WINDOW_TOKEN}>w,<${VIM_WINDOW_TOKEN}><${VIM_WINDOW_TOKEN}>,<${VIM_WINDOW_TOKEN}>ctrl+w`,
         desc: "Toggle copy mode",
         group: "Session",
         cmd: () => {
@@ -1184,7 +1184,7 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
-        key: `<${VIM_WINDOW_TOKEN}>j`,
+        key: `<${VIM_WINDOW_TOKEN}>j,<${VIM_WINDOW_TOKEN}>ctrl+j`,
         desc: "Exit copy mode",
         group: "Session",
         cmd: () => {

@@ -1697,6 +1697,32 @@ describe("vim motion handler", () => {
     expect(ctx.navigateCalls).toEqual(["up"])
   })
 
+  test("ctrl+w ctrl+k navigates to copy mode (ctrl held throughout)", () => {
+    const ctx = createHandler("abc")
+
+    expect(ctx.handler.handleKey(createEvent("w", { ctrl: true }).event)).toBe(true)
+    expect(ctx.state.pending()).toBe("w")
+
+    const k = createEvent("k", { ctrl: true })
+    expect(ctx.handler.handleKey(k.event)).toBe(true)
+    expect(k.prevented()).toBe(true)
+    expect(ctx.state.pending()).toBe("")
+    expect(ctx.navigateCalls).toEqual(["up"])
+  })
+
+  test("ctrl+w ctrl+j navigates down (ctrl held throughout)", () => {
+    const ctx = createHandler("abc")
+
+    expect(ctx.handler.handleKey(createEvent("w", { ctrl: true }).event)).toBe(true)
+    expect(ctx.state.pending()).toBe("w")
+
+    const j = createEvent("j", { ctrl: true })
+    expect(ctx.handler.handleKey(j.event)).toBe(true)
+    expect(j.prevented()).toBe(true)
+    expect(ctx.state.pending()).toBe("")
+    expect(ctx.navigateCalls).toEqual(["down"])
+  })
+
   test("ctrl+w invalid key clears pending in normal mode", () => {
     const ctx = createHandler("abc")
 
@@ -6634,6 +6660,29 @@ describe("copy mode", () => {
 
     ctx.handler.handleKey(createEvent("w", { ctrl: true }).event)
     ctx.handler.handleKey(createEvent("w").event)
+
+    expect(ctx.state.mode()).toBe("normal")
+    expect(ctx.copyExitArgs).toEqual([false])
+  })
+
+  test("ctrl+w ctrl+j exits copy mode (ctrl held throughout)", () => {
+    const ctx = createHandler("abc", { mode: "copy" })
+
+    expect(ctx.handler.handleKey(createEvent("w", { ctrl: true }).event)).toBe(true)
+    expect(ctx.state.pending()).toBe("w")
+
+    const j = createEvent("j", { ctrl: true })
+    expect(ctx.handler.handleKey(j.event)).toBe(true)
+    expect(j.prevented()).toBe(true)
+    expect(ctx.state.mode()).toBe("normal")
+    expect(ctx.copyExitArgs).toEqual([false])
+  })
+
+  test("ctrl+w ctrl+w exits copy mode (ctrl held throughout)", () => {
+    const ctx = createHandler("abc", { mode: "copy" })
+
+    ctx.handler.handleKey(createEvent("w", { ctrl: true }).event)
+    ctx.handler.handleKey(createEvent("w", { ctrl: true }).event)
 
     expect(ctx.state.mode()).toBe("normal")
     expect(ctx.copyExitArgs).toEqual([false])

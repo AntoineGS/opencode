@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { createTestKeymap } from "@opentui/keymap/testing"
+import * as addons from "@opentui/keymap/addons/opentui"
 import { VIM_WINDOW_TOKEN } from "../../../../src/cli/cmd/tui/keymap"
 
 describe("opencode keymap", () => {
@@ -35,6 +36,52 @@ describe("opencode keymap", () => {
     testKeymap.keymap.registerLayer({
       priority: 100,
       bindings: [{ key: `<${VIM_WINDOW_TOKEN}><${VIM_WINDOW_TOKEN}>`, cmd: () => void calls.push("toggle-copy") }],
+    })
+
+    testKeymap.host.press("w", { ctrl: true })
+    testKeymap.host.press("w", { ctrl: true })
+
+    expect(calls).toEqual(["toggle-copy"])
+    expect(testKeymap.keymap.getPendingSequence()).toEqual([])
+  })
+
+  test("vim window token supports holding ctrl for j/k navigation bindings", () => {
+    const testKeymap = createTestKeymap({ defaultKeys: true })
+    const calls: string[] = []
+
+    addons.registerCommaBindings(testKeymap.keymap)
+    testKeymap.keymap.registerToken({ name: VIM_WINDOW_TOKEN, key: "ctrl+w" })
+    testKeymap.keymap.registerLayer({
+      priority: 100,
+      bindings: [
+        { key: `<${VIM_WINDOW_TOKEN}>j,<${VIM_WINDOW_TOKEN}>ctrl+j`, cmd: () => void calls.push("down") },
+        { key: `<${VIM_WINDOW_TOKEN}>k,<${VIM_WINDOW_TOKEN}>ctrl+k`, cmd: () => void calls.push("up") },
+      ],
+    })
+
+    testKeymap.host.press("w", { ctrl: true })
+    testKeymap.host.press("j", { ctrl: true })
+    testKeymap.host.press("w", { ctrl: true })
+    testKeymap.host.press("k", { ctrl: true })
+
+    expect(calls).toEqual(["down", "up"])
+    expect(testKeymap.keymap.getPendingSequence()).toEqual([])
+  })
+
+  test("vim window token supports comma-separated held ctrl+w binding", () => {
+    const testKeymap = createTestKeymap({ defaultKeys: true })
+    const calls: string[] = []
+
+    addons.registerCommaBindings(testKeymap.keymap)
+    testKeymap.keymap.registerToken({ name: VIM_WINDOW_TOKEN, key: "ctrl+w" })
+    testKeymap.keymap.registerLayer({
+      priority: 100,
+      bindings: [
+        {
+          key: `<${VIM_WINDOW_TOKEN}>w,<${VIM_WINDOW_TOKEN}><${VIM_WINDOW_TOKEN}>,<${VIM_WINDOW_TOKEN}>ctrl+w`,
+          cmd: () => void calls.push("toggle-copy"),
+        },
+      ],
     })
 
     testKeymap.host.press("w", { ctrl: true })

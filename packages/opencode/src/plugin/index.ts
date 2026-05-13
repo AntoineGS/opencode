@@ -10,7 +10,6 @@ import { ConfigPlugin } from "@/config/plugin"
 import { Bus } from "../bus"
 import * as Log from "@opencode-ai/core/util/log"
 import { createOpencodeClient } from "@opencode-ai/sdk"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import { ServerAuth } from "@/server/auth"
 import { CodexAuthPlugin } from "./codex"
 import { Session } from "@/session/session"
@@ -29,6 +28,7 @@ import { PluginLoader } from "./loader"
 import { parsePluginSpecifier, readPluginId, readV1Plugin, resolvePluginId } from "./shared"
 import { registerAdapter } from "@/control-plane/adapters"
 import type { WorkspaceAdapter } from "@/control-plane/types"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 
 const log = Log.create({ service: "plugin" })
 const BUILTIN = ["op-anthropic-auth"]
@@ -42,6 +42,7 @@ type State = {
   hooks: Hooks[]
 }
 
+// Hook names that follow the (input, output) => Promise<void> trigger pattern
 type TriggerName = {
   [K in keyof Hooks]-?: NonNullable<Hooks[K]> extends (input: any, output: any) => Promise<void> ? K : never
 }[keyof Hooks]
@@ -62,9 +63,13 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Plugin") {}
 
-export function plugins(list: ConfigPlugin.Origin[] | undefined, pure: boolean) {
-  if (pure) return []
-  if (Flag.OPENCODE_DISABLE_DEFAULT_PLUGINS) return list ?? []
+// Built-in plugins that are directly imported (not installed from npm)
+export function plugins(
+  list: ConfigPlugin.Origin[] | undefined,
+  flags: Pick<RuntimeFlags.Info, "pure" | "disableDefaultPlugins">,
+) {
+  if (flags.pure) return []
+  if (flags.disableDefaultPlugins) return list ?? []
   return ConfigPlugin.deduplicatePluginOrigins([...BUILTIN_ORIGINS, ...(list ?? [])])
 }
 
@@ -123,6 +128,7 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const bus = yield* Bus.Service
     const config = yield* Config.Service
+    const flags = yield* RuntimeFlags.Service
 
     const state = yield* InstanceState.make<State>(
       Effect.fn("Plugin.state")(function* (ctx) {
@@ -159,7 +165,7 @@ export const layer = Layer.effect(
           $: typeof Bun === "undefined" ? undefined : Bun.$,
         }
 
-        for (const plugin of INTERNAL_PLUGINS) {
+        for (const plugin of flags.disableDefaultPlugins ? [] : INTERNAL_PLUGINS) {
           log.info("loading internal plugin", { name: plugin.name })
           const init = yield* Effect.tryPromise({
             try: () => plugin(input),
@@ -170,8 +176,8 @@ export const layer = Layer.effect(
           if (init._tag === "Some") hooks.push(init.value)
         }
 
-        const items = plugins(cfg.plugin_origins, Flag.OPENCODE_PURE)
-        if (Flag.OPENCODE_PURE && (cfg.plugin_origins?.length || BUILTIN.length)) {
+        const items = plugins(cfg.plugin_origins, flags)
+        if (flags.pure && (cfg.plugin_origins?.length || BUILTIN.length)) {
           log.info("skipping external plugins in pure mode", {
             count: BUILTIN.length + (cfg.plugin_origins?.length ?? 0),
           })
@@ -221,6 +227,9 @@ export const layer = Layer.effect(
         )
         for (const load of loaded) {
           if (!load) continue
+
+          // Keep plugin execution sequential so hook registration and execution
+          // order remains deterministic across plugin runs.
           yield* Effect.tryPromise({
             try: () => applyPlugin(load, input, hooks),
             catch: (err) => {
@@ -230,11 +239,18 @@ export const layer = Layer.effect(
             },
           }).pipe(
             Effect.catch(() => {
+              // TODO: make proper events for this
+              // bus.publish(Session.Event.Error, {
+              //   error: new NamedError.Unknown({
+              //     message: `Failed to load plugin ${load.spec}: ${message}`,
+              //   }).toObject(),
+              // })
               return Effect.void
             }),
           )
         }
 
+        // Notify plugins of current config
         for (const hook of hooks) {
           yield* Effect.tryPromise({
             try: () => Promise.resolve((hook as any).config?.(cfg)),
@@ -244,6 +260,7 @@ export const layer = Layer.effect(
           }).pipe(Effect.ignore)
         }
 
+        // Subscribe to bus events, fiber interrupted when scope closes
         yield* bus.subscribeAll().pipe(
           Stream.runForEach((input) =>
             Effect.sync(() => {
@@ -287,6 +304,10 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(Bus.layer), Layer.provide(Config.defaultLayer))
+export const defaultLayer = layer.pipe(
+  Layer.provide(Bus.layer),
+  Layer.provide(Config.defaultLayer),
+  Layer.provide(RuntimeFlags.defaultLayer),
+)
 
 export * as Plugin from "."

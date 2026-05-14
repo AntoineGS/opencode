@@ -152,7 +152,16 @@ const lsp = Layer.succeed(
 const status = SessionStatus.layer.pipe(Layer.provideMerge(Bus.layer))
 const run = SessionRunState.layer.pipe(Layer.provide(status))
 const infra = Layer.mergeAll(NodeFileSystem.layer, CrossSpawnSpawner.defaultLayer)
-function makeHttp() {
+
+const processorCreateStarted: Array<() => void> = []
+const blockingProcessor = Layer.succeed(
+  SessionProcessor.Service,
+  SessionProcessor.Service.of({
+    create: () => Effect.sync(() => processorCreateStarted.shift()?.()).pipe(Effect.andThen(Effect.never)),
+  }),
+)
+
+function makeHttp(input?: { processor?: "blocking" }) {
   const deps = Layer.mergeAll(
     Session.defaultLayer,
     Snapshot.defaultLayer,
@@ -180,18 +189,26 @@ function makeHttp() {
     Layer.provide(Reference.defaultLayer),
     Layer.provide(Ripgrep.defaultLayer),
     Layer.provide(Format.defaultLayer),
-    Layer.provide(RuntimeFlags.layer()),
+    Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
     Layer.provideMerge(todo),
     Layer.provideMerge(question),
     Layer.provideMerge(deps),
   )
   const trunc = Truncate.layer.pipe(Layer.provideMerge(deps))
-  const proc = SessionProcessor.layer.pipe(
-    Layer.provide(summary),
-    Layer.provide(Image.defaultLayer),
+  const proc =
+    input?.processor === "blocking"
+      ? blockingProcessor
+      : SessionProcessor.layer.pipe(
+          Layer.provide(summary),
+          Layer.provide(Image.defaultLayer),
+          Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
+          Layer.provideMerge(deps),
+        )
+  const compact = SessionCompaction.layer.pipe(
+    Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
+    Layer.provideMerge(proc),
     Layer.provideMerge(deps),
   )
-  const compact = SessionCompaction.layer.pipe(Layer.provideMerge(proc), Layer.provideMerge(deps))
   return Layer.mergeAll(
     TestLLMServer.layer,
     SessionPrompt.layer.pipe(
@@ -206,12 +223,14 @@ function makeHttp() {
       Layer.provideMerge(trunc),
       Layer.provide(Instruction.defaultLayer),
       Layer.provide(SystemPrompt.defaultLayer),
+      Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
       Layer.provideMerge(deps),
     ),
   ).pipe(Layer.provide(summary))
 }
 
 const it = testEffect(makeHttp())
+const race = testEffect(makeHttp({ processor: "blocking" }))
 const unix = process.platform !== "win32" ? it.instance : it.instance.skip
 
 // Config that registers a custom "test" provider with a "test-model" model
@@ -334,6 +353,14 @@ const deferredAsPromise = <A>(deferred: Deferred.Deferred<A>): PromiseLike<A> =>
     return deferredAsPromise(deferred) as PromiseLike<never>
   },
 })
+
+function defer<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  const promise = new Promise<T>((done) => {
+    resolve = done
+  })
+  return { promise, resolve }
+}
 
 const succeedVoid = (deferred: Deferred.Deferred<void>) => {
   Effect.runSync(Deferred.succeed(deferred, void 0).pipe(Effect.ignore))
@@ -890,6 +917,96 @@ it.instance(
   3_000,
 )
 
+race.instance(
+  "finalizes assistant when cancelled before processor creation completes",
+  () =>
+    Effect.gen(function* () {
+      yield* useServerConfig(providerCfg)
+      processorCreateStarted.length = 0
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          processorCreateStarted.length = 0
+        }),
+      )
+
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "Processor creation race" })
+
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "first" }],
+      })
+
+      const firstCreate = defer<void>()
+      processorCreateStarted.push(firstCreate.resolve)
+      const first = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+      yield* Effect.promise(() => firstCreate.promise)
+
+      yield* prompt.cancel(chat.id)
+      const firstExit = yield* Fiber.await(first)
+      expect(Exit.isSuccess(firstExit)).toBe(true)
+
+      let messages = yield* sessions.messages({ sessionID: chat.id })
+      const firstInterrupted = messages.at(-1)
+      expect(firstInterrupted?.info.role).toBe("assistant")
+      expect(firstInterrupted?.parts).toHaveLength(0)
+      if (firstInterrupted?.info.role === "assistant") {
+        expect(firstInterrupted.info.finish).toBeUndefined()
+        expect(firstInterrupted.info.time.completed).toBeNumber()
+        expect(firstInterrupted.info.error?.name).toBe("MessageAbortedError")
+      }
+
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "second" }],
+      })
+
+      const secondCreate = defer<void>()
+      processorCreateStarted.push(secondCreate.resolve)
+      const second = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+      yield* Effect.promise(() => secondCreate.promise)
+
+      yield* prompt.cancel(chat.id)
+      const secondExit = yield* Fiber.await(second)
+      expect(Exit.isSuccess(secondExit)).toBe(true)
+
+      messages = yield* sessions.messages({ sessionID: chat.id })
+      const poisonMessages = messages.filter(
+        (message) =>
+          message.info.role === "assistant" &&
+          message.parts.length === 0 &&
+          !message.info.finish &&
+          !message.info.time.completed &&
+          !message.info.error,
+      )
+      expect(poisonMessages).toHaveLength(0)
+
+      const interruptedMessages = messages.filter(
+        (message) =>
+          message.info.role === "assistant" &&
+          message.parts.length === 0 &&
+          message.info.time.completed &&
+          message.info.error?.name === "MessageAbortedError",
+      )
+      expect(interruptedMessages).toHaveLength(2)
+
+      const lastUser = messages.at(-2)
+      const lastAssistant = messages.at(-1)
+      expect(lastUser?.info.role).toBe("user")
+      expect(lastAssistant?.info.role).toBe("assistant")
+      if (lastUser?.info.role === "user" && lastAssistant?.info.role === "assistant") {
+        expect(lastAssistant.info.parentID).toBe(lastUser?.info.id)
+      }
+    }),
+  { git: true },
+  3_000,
+)
+
 it.instance(
   "cancel finalizes subtask tool state",
   () =>
@@ -1113,7 +1230,7 @@ it.instance(
 )
 
 it.instance(
-  "assertNotBusy throws BusyError when loop running",
+  "assertNotBusy fails with BusyError when loop running",
   () =>
     Effect.gen(function* () {
       const { llm } = yield* useServerConfig(providerCfg)
@@ -1132,6 +1249,7 @@ it.instance(
       expect(Exit.isFailure(exit)).toBe(true)
       if (Exit.isFailure(exit)) {
         expect(Cause.squash(exit.cause)).toBeInstanceOf(Session.BusyError)
+        expect(Cause.squash(exit.cause)).toMatchObject({ _tag: "SessionBusyError", sessionID: chat.id })
       }
 
       yield* prompt.cancel(chat.id)
@@ -1175,6 +1293,7 @@ it.instance(
       expect(Exit.isFailure(exit)).toBe(true)
       if (Exit.isFailure(exit)) {
         expect(Cause.squash(exit.cause)).toBeInstanceOf(Session.BusyError)
+        expect(Cause.squash(exit.cause)).toMatchObject({ _tag: "SessionBusyError", sessionID: chat.id })
       }
 
       yield* prompt.cancel(chat.id)
@@ -1506,11 +1625,26 @@ unix(
     withSh(() =>
       Effect.gen(function* () {
         const { prompt, chat } = yield* boot()
+        const { directory: dir } = yield* TestInstance
+        const afs = yield* AppFileSystem.Service
+        const ready = path.join(dir, ".trap-ready")
 
         const sh = yield* prompt
-          .shell({ sessionID: chat.id, agent: "build", command: "trap '' TERM; sleep 30" })
+          .shell({
+            sessionID: chat.id,
+            agent: "build",
+            // Touch marker AFTER trap installs so the test waits for the actual
+            // ignore-TERM state before cancelling; otherwise SIGTERM can arrive
+            // before `trap` runs and the escalation path is never exercised.
+            command: `trap '' TERM; touch "${ready}"; sleep 30`,
+          })
           .pipe(Effect.forkChild)
-        yield* Effect.sleep(50)
+
+        yield* Effect.gen(function* () {
+          while (!(yield* afs.existsSafe(ready))) {
+            yield* Effect.sleep(Duration.millis(10))
+          }
+        }).pipe(Effect.timeout(Duration.seconds(5)))
 
         yield* prompt.cancel(chat.id)
 
@@ -1787,7 +1921,7 @@ it.instance(
 
       if (msg.info.role !== "user") throw new Error("expected user message")
 
-      const stored = MessageV2.get({
+      const stored = yield* MessageV2.get({
         sessionID: session.id,
         messageID: msg.info.id,
       })
@@ -1875,7 +2009,7 @@ it.instance(
         parts: yield* prompt.resolvePromptParts("Use @docs for context"),
       })
 
-      const stored = MessageV2.get({ sessionID: session.id, messageID: message.info.id })
+      const stored = yield* MessageV2.get({ sessionID: session.id, messageID: message.info.id })
       const synthetic = stored.parts.filter(
         (part): part is MessageV2.TextPart => part.type === "text" && part.synthetic === true,
       )
@@ -1931,7 +2065,7 @@ it.instance(
         ],
       })
 
-      const stored = MessageV2.get({ sessionID: session.id, messageID: message.info.id })
+      const stored = yield* MessageV2.get({ sessionID: session.id, messageID: message.info.id })
       const synthetic = stored.parts.filter(
         (part): part is MessageV2.TextPart => part.type === "text" && part.synthetic === true,
       )
@@ -1991,7 +2125,7 @@ it.instance(
         parts,
         noReply: true,
       })
-      const stored = MessageV2.get({ sessionID: session.id, messageID: message.info.id })
+      const stored = yield* MessageV2.get({ sessionID: session.id, messageID: message.info.id })
       const textParts = stored.parts.filter((part) => part.type === "text")
       const hasContent = textParts.some((part) => part.text.includes("special content"))
       expect(hasContent).toBe(true)

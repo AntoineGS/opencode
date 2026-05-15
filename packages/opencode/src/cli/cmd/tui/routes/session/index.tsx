@@ -1657,6 +1657,7 @@ function TextPart(props: {
           streaming={true}
           internalBlockMode="top-level"
           content={props.part.text.trim()}
+          tableOptions={{ style: "grid" }}
           conceal={ctx.conceal()}
           fg={theme.markdownText}
           bg={theme.background}

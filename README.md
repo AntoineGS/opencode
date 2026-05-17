@@ -197,5 +197,5 @@ Have a suggestion? [Open an issue](https://github.com/leohenon/opencode-vim/issu
 
 ## Contributors
 
-<a href="https://github.com/reobin"><img src="https://github.com/reobin.png" width="40" height="40" /></a> <a href="https://github.com/BrettKulp"><img src="https://github.com/BrettKulp.png" width="40" height="40" /></a> <a href="https://github.com/lamiphil"><img src="https://github.com/lamiphil.png" width="40" height="40" /></a>
+<a href="https://github.com/reobin"><img src="https://github.com/reobin.png" width="40" height="40" /></a> <a href="https://github.com/BrettKulp"><img src="https://github.com/BrettKulp.png" width="40" height="40" /></a> <a href="https://github.com/lamiphil"><img src="https://github.com/lamiphil.png" width="40" height="40" /></a> <a href="https://github.com/XPhyro"><img src="https://github.com/XPhyro.png" width="40" height="40" /></a>
 

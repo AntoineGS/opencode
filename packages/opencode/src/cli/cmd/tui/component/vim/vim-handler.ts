@@ -14,11 +14,9 @@ import {
   deleteSelection,
   deleteSpan,
   deleteUnderCursor,
-  deleteWord,
-  deleteWordBackward,
-  deleteWordEnd,
   findChar,
   findCharInLine,
+  findCharTargetInLine,
   firstNonWhitespace,
   getLineColumn,
   insertLineStart,
@@ -45,8 +43,9 @@ import {
   nextWordStart,
   openLineAbove,
   openLineBelow,
-  type ParagraphOperation,
-  type ParagraphResult,
+  type VimOperator,
+  type VimOperatorResult,
+  type VimSpan,
   type VimWantedColumn,
   pasteAfter,
   pasteBefore,
@@ -63,10 +62,6 @@ import {
   yankLine,
   yankLineSpan,
   yankSelection,
-  yankWord,
-  yankWordEnd,
-  yankWordEndSpan,
-  yankWordSpan,
 } from "./vim-motions"
 
 export type VimEvent = {
@@ -81,6 +76,7 @@ export type VimEvent = {
 }
 
 export type VimCopyMove = "up" | "down" | "left" | "right"
+type VimFindOperator = "f" | "F" | "t" | "T"
 
 export function createVimHandler(input: {
   enabled: Accessor<boolean>
@@ -123,6 +119,7 @@ export function createVimHandler(input: {
   setRegister?: (register: VimRegister, notify?: boolean) => void
 }) {
   let wantedColumn: VimWantedColumn | undefined
+  let pendingOperatorFind: { operation: VimOperator; find: VimFindOperator } | undefined
 
   function hasModifier(event: VimEvent) {
     return !!event.ctrl || !!event.meta || !!event.super
@@ -137,13 +134,15 @@ export function createVimHandler(input: {
   }
 
   function isPrintable(event: VimEvent) {
-    return !!event.name && (event.name.length === 1 || event.name === "space")
+    const key = normalizedKeyName(event)
+    return key.length === 1 || key === "space"
   }
 
   function value(event: VimEvent) {
-    if (event.name === "space") return " "
-    if (event.shift && event.name?.length === 1 && /[a-z]/.test(event.name)) return event.name.toUpperCase()
-    return event.name ?? ""
+    const key = normalizedKeyName(event)
+    if (key === "space") return " "
+    if (event.shift && key.length === 1 && /[a-z]/.test(key)) return key.toUpperCase()
+    return key
   }
 
   function replaceValue(event: VimEvent, visual = false) {
@@ -222,13 +221,13 @@ export function createVimHandler(input: {
   const edit = repeat.edit
   const begin = repeat.begin
 
-  function applyOperatorYank(result: ParagraphResult) {
+  function applyOperatorYank(result: VimOperatorResult) {
     if (result.register) setRegister(result.register, true)
     if (result.span && result.span.end > result.span.start) input.flash?.(result.span)
     input.state.clearPending()
   }
 
-  function applyOperatorEdit(result: () => ParagraphResult, operation: "d" | "c") {
+  function applyOperatorEdit(result: () => VimOperatorResult, operation: "d" | "c") {
     const apply = () => {
       const next = result()
       if (!next.span && !next.register) {
@@ -245,7 +244,7 @@ export function createVimHandler(input: {
     else edit(apply)
   }
 
-  function applyOperatorResult(result: () => ParagraphResult, operation: ParagraphOperation) {
+  function applyOperatorResult(result: () => VimOperatorResult, operation: VimOperator) {
     const initial = result()
 
     // no motion: vim no-ops the operator without editing or changing mode.
@@ -260,7 +259,7 @@ export function createVimHandler(input: {
     applyOperatorEdit(result, operation)
   }
 
-  function paragraphOperator(key: string, operation: ParagraphOperation): boolean {
+  function paragraphOperator(key: string, operation: VimOperator): boolean {
     if (key !== "{" && key !== "}") return false
 
     applyOperatorResult(
@@ -274,7 +273,7 @@ export function createVimHandler(input: {
     return true
   }
 
-  function matchingBracketOperator(key: string, operation: ParagraphOperation): boolean {
+  function matchingBracketOperator(key: string, operation: VimOperator): boolean {
     if (key !== "%") return false
 
     applyOperatorResult(() => matchingBracketOperation(input.textarea()), operation)
@@ -282,21 +281,115 @@ export function createVimHandler(input: {
     return true
   }
 
-  function changeWord(big: boolean) {
-    const textarea = input.textarea()
-    const char = textarea.plainText[textarea.cursorOffset]
-    return char && !/\s/.test(char) ? deleteWordEnd(textarea, big) : deleteWord(textarea)
+  function charwiseOperation(span: VimSpan | null): VimOperatorResult {
+    if (!span) return { span: null, register: null }
+    return { span, register: { text: input.textarea().plainText.slice(span.start, span.end), linewise: false } }
   }
 
-  function beginChangeWord(result: () => VimRegister) {
-    begin(() => {
-      const reg = result()
-      input.state.clearPending()
-      if (!reg) return false
-      setRegister(reg)
-      input.state.setMode("insert")
+  function nextWordOperation(big: boolean) {
+    const textarea = input.textarea()
+    const start = textarea.cursorOffset
+    const end = nextWordStart(textarea.plainText, start, big)
+    return charwiseOperation(end > start ? { start, end } : null)
+  }
+
+  function previousWordOperation() {
+    const textarea = input.textarea()
+    const end = textarea.cursorOffset
+    const start = prevWordStart(textarea.plainText, end, false)
+    return charwiseOperation(start < end ? { start, end } : null)
+  }
+
+  function wordEndOperation(big: boolean) {
+    const textarea = input.textarea()
+    const start = textarea.cursorOffset
+    if (start >= textarea.plainText.length) return charwiseOperation(null)
+    const end = wordEnd(textarea.plainText, start, big) + 1
+    return charwiseOperation(end > start ? { start, end } : null)
+  }
+
+  function changeWordOperation(big: boolean) {
+    const textarea = input.textarea()
+    const char = textarea.plainText[textarea.cursorOffset]
+    return char && !/\s/.test(char) ? wordEndOperation(big) : nextWordOperation(big)
+  }
+
+  function wordOperator(event: VimEvent, key: string, operation: VimOperator): boolean {
+    if ((key === "w" || isShifted(event, "w")) && !hasModifier(event)) {
+      const big = isShifted(event, "w")
+      applyOperatorResult(() => (operation === "c" ? changeWordOperation(big) : nextWordOperation(big)), operation)
       return true
-    })
+    }
+    if (key === "b" && !event.shift && !hasModifier(event) && operation !== "y") {
+      applyOperatorResult(() => previousWordOperation(), operation)
+      return true
+    }
+    if ((key === "e" || isShifted(event, "e")) && !hasModifier(event)) {
+      applyOperatorResult(() => wordEndOperation(isShifted(event, "e")), operation)
+      return true
+    }
+    return false
+  }
+
+  function findOperation(char: string, forward: boolean, till: boolean) {
+    const textarea = input.textarea()
+    const start = textarea.cursorOffset
+    const lineStart = textarea.plainText.lastIndexOf("\n", start - 1) + 1
+    const lineEnd = textarea.plainText.indexOf("\n", start)
+    const target = findCharTargetInLine(
+      textarea.plainText.slice(lineStart, lineEnd === -1 ? textarea.plainText.length : lineEnd),
+      start - lineStart,
+      char,
+      forward,
+    )
+    if (target === null) return charwiseOperation(null)
+
+    const offset = lineStart + target
+    if (forward) {
+      const spanEnd = till ? offset : offset + 1
+      return charwiseOperation(spanEnd > start ? { start, end: spanEnd } : null)
+    }
+
+    const spanStart = till ? offset + 1 : offset
+    return charwiseOperation(spanStart < start ? { start: spanStart, end: start } : null)
+  }
+
+  function startOperatorFind(event: VimEvent, operation: VimOperator, find: VimFindOperator) {
+    pendingOperatorFind = { operation, find }
+    input.state.setPending(find, operation + find)
+    event.preventDefault()
+    return true
+  }
+
+  function operatorFind(event: VimEvent, key: string, operation: VimOperator) {
+    if (key === "f" && !event.shift && !hasModifier(event)) return startOperatorFind(event, operation, "f")
+    if (isShifted(event, "f") && !hasModifier(event)) return startOperatorFind(event, operation, "F")
+    if (key === "t" && !event.shift && !hasModifier(event)) return startOperatorFind(event, operation, "t")
+    if (isShifted(event, "t") && !hasModifier(event)) return startOperatorFind(event, operation, "T")
+    return false
+  }
+
+  function pendingFindOperator(event: VimEvent): boolean {
+    if (!pendingOperatorFind) return false
+    if (input.state.pending() !== pendingOperatorFind.find) {
+      pendingOperatorFind = undefined
+      return false
+    }
+    if (isPrintable(event) && !hasModifier(event)) {
+      const forward = pendingOperatorFind.find === "f" || pendingOperatorFind.find === "t"
+      const till = pendingOperatorFind.find === "t" || pendingOperatorFind.find === "T"
+      const char = value(event)
+      const operation = pendingOperatorFind.operation
+      pendingOperatorFind = undefined
+      applyOperatorResult(() => findOperation(char, forward, till), operation)
+      input.state.setLastFind({ char, forward, till })
+      event.preventDefault()
+      return true
+    }
+    pendingOperatorFind = undefined
+    input.state.clearPending()
+    event.preventDefault()
+    return true
   }
 
   function undo() {
@@ -345,6 +438,8 @@ export function createVimHandler(input: {
       event.preventDefault()
       return true
     }
+
+    if (pendingFindOperator(event)) return true
 
     if (input.state.pending() === "vr" && input.state.isVisual()) {
       if (hasModifier(event)) {
@@ -594,27 +689,7 @@ export function createVimHandler(input: {
         return true
       }
 
-      if (key === "w" && !event.shift) {
-        beginChangeWord(() => changeWord(false))
-        event.preventDefault()
-        return true
-      }
-
-      if (isShifted(event, "w") && !hasModifier(event)) {
-        beginChangeWord(() => changeWord(true))
-        event.preventDefault()
-        return true
-      }
-
-      if (key === "b" && !event.shift) {
-        beginChangeWord(() => deleteWordBackward(input.textarea()))
-        event.preventDefault()
-        return true
-      }
-
-      if ((key === "e" || key === "E") && !hasModifier(event)) {
-        const big = key === "E" || !!event.shift
-        beginChangeWord(() => deleteWordEnd(input.textarea(), big))
+      if (wordOperator(event, key, "c")) {
         event.preventDefault()
         return true
       }
@@ -628,6 +703,8 @@ export function createVimHandler(input: {
         event.preventDefault()
         return true
       }
+
+      if (operatorFind(event, key, "c")) return true
 
       input.state.clearPending()
     }
@@ -648,43 +725,7 @@ export function createVimHandler(input: {
         return true
       }
 
-      if (key === "w" && !event.shift) {
-        edit(() => {
-          const reg = deleteWord(input.textarea())
-          if (reg) setRegister(reg)
-          input.state.clearPending()
-        })
-        event.preventDefault()
-        return true
-      }
-
-      if (isShifted(event, "w") && !hasModifier(event)) {
-        edit(() => {
-          const reg = deleteWord(input.textarea(), true)
-          if (reg) setRegister(reg)
-          input.state.clearPending()
-        })
-        event.preventDefault()
-        return true
-      }
-
-      if (key === "b" && !event.shift && !hasModifier(event)) {
-        edit(() => {
-          const reg = deleteWordBackward(input.textarea())
-          if (reg) setRegister(reg)
-          input.state.clearPending()
-        })
-        event.preventDefault()
-        return true
-      }
-
-      if ((key === "e" || key === "E") && !hasModifier(event)) {
-        const big = key === "E" || !!event.shift
-        edit(() => {
-          const reg = deleteWordEnd(input.textarea(), big)
-          if (reg) setRegister(reg)
-          input.state.clearPending()
-        })
+      if (wordOperator(event, key, "d")) {
         event.preventDefault()
         return true
       }
@@ -698,6 +739,8 @@ export function createVimHandler(input: {
         event.preventDefault()
         return true
       }
+
+      if (operatorFind(event, key, "d")) return true
 
       input.state.clearPending()
     }
@@ -718,33 +761,7 @@ export function createVimHandler(input: {
         return true
       }
 
-      if (key === "w" && !event.shift) {
-        const span = yankWordSpan(input.textarea())
-        const reg = yankWord(input.textarea())
-        if (reg) setRegister(reg, true)
-        if (span && span.end > span.start) input.flash?.(span)
-        input.state.clearPending()
-        event.preventDefault()
-        return true
-      }
-
-      if (isShifted(event, "w") && !hasModifier(event)) {
-        const span = yankWordSpan(input.textarea(), true)
-        const reg = yankWord(input.textarea(), true)
-        if (reg) setRegister(reg, true)
-        if (span && span.end > span.start) input.flash?.(span)
-        input.state.clearPending()
-        event.preventDefault()
-        return true
-      }
-
-      if ((key === "e" || key === "E") && !hasModifier(event)) {
-        const big = key === "E" || !!event.shift
-        const span = yankWordEndSpan(input.textarea(), big)
-        const reg = yankWordEnd(input.textarea(), big)
-        if (reg) setRegister(reg, true)
-        if (span && span.end > span.start) input.flash?.(span)
-        input.state.clearPending()
+      if (wordOperator(event, key, "y")) {
         event.preventDefault()
         return true
       }

@@ -216,14 +216,14 @@ export function moveNextParagraph(textarea: TextareaRenderable) {
   textarea.cursorOffset = nextParagraphTarget(textarea.plainText, textarea.cursorOffset)
 }
 
-export type ParagraphOperation = "d" | "c" | "y"
+export type VimOperator = "d" | "c" | "y"
 
-export type ParagraphResult = {
+export type VimOperatorResult = {
   span: VimSpan | null
   register: VimRegister
 }
 
-export function matchingBracketOperation(textarea: TextareaRenderable): ParagraphResult {
+export function matchingBracketOperation(textarea: TextareaRenderable): VimOperatorResult {
   const text = textarea.plainText
   const cursor = textarea.cursorOffset
   const target = matchingBracketTarget(text, cursor)
@@ -237,12 +237,12 @@ function asLinewise(slice: string): string {
   return slice.endsWith("\n") ? slice : slice + "\n"
 }
 
-function buildParagraphResult(
+function buildOperatorResult(
   text: string,
   span: VimSpan | null,
   registerSpan: VimSpan | null,
   linewise: boolean,
-): ParagraphResult {
+): VimOperatorResult {
   if (!span) return { span: null, register: null }
   const register = registerSpan ?? span
   const slice = text.slice(register.start, register.end)
@@ -276,7 +276,7 @@ function classifyNextParagraph(text: string, cursor: number): NextClassification
 // linewise rules derived empirically from nvim:
 //   d: line-aligned cursor + (blank target OR motion crosses lines)
 //   y/c: line-aligned cursor AND blank target
-function isLinewiseNext(c: NextClassification, op: ParagraphOperation): boolean {
+function isLinewiseNext(c: NextClassification, op: VimOperator): boolean {
   if (!c.lineAligned) return false
   return op === "d" ? c.targetIsBlank || c.multiLine : c.targetIsBlank
 }
@@ -287,7 +287,7 @@ function isLinewiseNext(c: NextClassification, op: ParagraphOperation): boolean 
 function nextLinewiseSpan(
   text: string,
   c: NextClassification,
-  op: ParagraphOperation,
+  op: VimOperator,
 ): { span: VimSpan | null; registerSpan: VimSpan | null } {
   if (op === "d" && !c.targetIsBlank) {
     const extendBack = text[text.length - 1] !== "\n" && c.lineStartOffset > 0
@@ -309,23 +309,23 @@ function nextCharwiseSpan(text: string, cursor: number, c: NextClassification): 
   return { start: cursor, end }
 }
 
-export function nextParagraphOperation(textarea: TextareaRenderable, operation: ParagraphOperation): ParagraphResult {
+export function nextParagraphOperation(textarea: TextareaRenderable, operation: VimOperator): VimOperatorResult {
   const text = textarea.plainText
   const cursor = textarea.cursorOffset
   if (text.length === 0) return { span: null, register: null }
 
   const c = classifyNextParagraph(text, cursor)
-  if (!isLinewiseNext(c, operation)) return buildParagraphResult(text, nextCharwiseSpan(text, cursor, c), null, false)
+  if (!isLinewiseNext(c, operation)) return buildOperatorResult(text, nextCharwiseSpan(text, cursor, c), null, false)
   const { span, registerSpan } = nextLinewiseSpan(text, c, operation)
-  return buildParagraphResult(text, span, registerSpan, true)
+  return buildOperatorResult(text, span, registerSpan, true)
 }
 
 // vim `{` operator. linewise for all of y/d/c when cursor is line-aligned.
 // c strips the trailing \n at cursor-1; d/y keep it.
 export function previousParagraphOperation(
   textarea: TextareaRenderable,
-  operation: ParagraphOperation,
-): ParagraphResult {
+  operation: VimOperator,
+): VimOperatorResult {
   const text = textarea.plainText
   const cursor = textarea.cursorOffset
   if (text.length === 0 || cursor === 0) return { span: null, register: null }
@@ -335,9 +335,9 @@ export function previousParagraphOperation(
   const target = previousParagraphTarget(text, cursor)
   if (target >= cursor) return { span: null, register: null }
 
-  if (!linewise || operation !== "c") return buildParagraphResult(text, { start: target, end: cursor }, null, linewise)
+  if (!linewise || operation !== "c") return buildOperatorResult(text, { start: target, end: cursor }, null, linewise)
   const end = text[cursor - 1] === "\n" ? cursor - 1 : cursor
-  return buildParagraphResult(text, end > target ? { start: target, end } : null, null, true)
+  return buildOperatorResult(text, end > target ? { start: target, end } : null, null, true)
 }
 
 export function isWord(char: string) {
@@ -461,6 +461,19 @@ export function firstNonWhitespace(text: string, offset: number) {
   return pos
 }
 
+export function findCharTargetInLine(text: string, offset: number, char: string, forward: boolean, skip = 1) {
+  if (forward) {
+    for (let i = offset + skip; i < text.length; i++) {
+      if (text[i] === char) return i
+    }
+    return null
+  }
+  for (let i = offset - skip; i >= 0; i--) {
+    if (text[i] === char) return i
+  }
+  return null
+}
+
 export function findCharInLine(
   text: string,
   offset: number,
@@ -469,17 +482,9 @@ export function findCharInLine(
   till = false,
   repeat = false,
 ) {
-  const skip = till && repeat ? 2 : 1
-  if (forward) {
-    for (let i = offset + skip; i < text.length; i++) {
-      if (text[i] === char) return till ? i - 1 : i
-    }
-  } else {
-    for (let i = offset - skip; i >= 0; i--) {
-      if (text[i] === char) return till ? i + 1 : i
-    }
-  }
-  return offset
+  const target = findCharTargetInLine(text, offset, char, forward, till && repeat ? 2 : 1)
+  if (target === null) return offset
+  return till ? target + (forward ? -1 : 1) : target
 }
 
 export function copyWordNext(rows: VimCopyRow[], get: (idx: number) => string, idx: number, col: number, big: boolean) {
@@ -714,24 +719,16 @@ export function deleteSpan(textarea: TextareaRenderable, span: VimSpan | null): 
 export function findChar(textarea: TextareaRenderable, char: string, forward: boolean, till = false, repeat = false) {
   const text = textarea.plainText
   const offset = textarea.cursorOffset
-  const skip = till && repeat ? 2 : 1
-  if (forward) {
-    const end = lineEnd(text, offset)
-    for (let i = offset + skip; i < end; i++) {
-      if (text[i] === char) {
-        textarea.cursorOffset = till ? i - 1 : i
-        return
-      }
-    }
-  } else {
-    const start = lineStart(text, offset)
-    for (let i = offset - skip; i >= start; i--) {
-      if (text[i] === char) {
-        textarea.cursorOffset = till ? i + 1 : i
-        return
-      }
-    }
-  }
+  const start = lineStart(text, offset)
+  const target = findCharTargetInLine(
+    text.slice(start, lineEnd(text, offset)),
+    offset - start,
+    char,
+    forward,
+    till && repeat ? 2 : 1,
+  )
+  if (target === null) return
+  textarea.cursorOffset = start + target + (till ? (forward ? -1 : 1) : 0)
 }
 
 export function joinLines(textarea: TextareaRenderable) {

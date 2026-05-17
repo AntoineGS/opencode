@@ -2842,6 +2842,57 @@ describe("vim motion handler", () => {
     expect(ctx.textarea.cursorOffset).toBe(3)
   })
 
+  test("f finds uppercase char forward", () => {
+    const ctx = createHandler("Hello World")
+    ctx.textarea.cursorOffset = 0
+
+    ctx.handler.handleKey(createEvent("f").event)
+    expect(ctx.state.pending()).toBe("f")
+
+    const w = createEvent("W")
+    expect(ctx.handler.handleKey(w.event)).toBe(true)
+    expect(w.prevented()).toBe(true)
+    expect(ctx.textarea.cursorOffset).toBe(6)
+    expect(ctx.state.pending()).toBe("")
+  })
+
+  test("F finds uppercase char backward", () => {
+    const ctx = createHandler("Hello World")
+    ctx.textarea.cursorOffset = 8
+
+    ctx.handler.handleKey(createEvent("F").event)
+    expect(ctx.state.pending()).toBe("F")
+
+    const w = createEvent("W")
+    expect(ctx.handler.handleKey(w.event)).toBe(true)
+    expect(ctx.textarea.cursorOffset).toBe(6)
+  })
+
+  test("t stops before uppercase char", () => {
+    const ctx = createHandler("Hello World")
+    ctx.textarea.cursorOffset = 0
+
+    ctx.handler.handleKey(createEvent("t").event)
+    expect(ctx.state.pending()).toBe("t")
+
+    const w = createEvent("W")
+    expect(ctx.handler.handleKey(w.event)).toBe(true)
+    expect(w.prevented()).toBe(true)
+    expect(ctx.textarea.cursorOffset).toBe(5)
+    expect(ctx.state.pending()).toBe("")
+  })
+
+  test("T stops after uppercase char backward", () => {
+    const ctx = createHandler("Hello World")
+    ctx.textarea.cursorOffset = 8
+
+    ctx.handler.handleKey(createEvent("T").event)
+    expect(ctx.state.pending()).toBe("T")
+
+    const w = createEvent("W")
+    expect(ctx.handler.handleKey(w.event)).toBe(true)
+    expect(ctx.textarea.cursorOffset).toBe(7)
+  })
   test("yy yanks current line into register", () => {
     const ctx = createHandler("one\ntwo\nthree")
     ctx.textarea.cursorOffset = 5

@@ -750,8 +750,9 @@ export function createVimHandler(input: {
       if (isPrintable(event) && !hasModifier(event)) {
         const forward = find === "f" || find === "t"
         const till = find === "t" || find === "T"
-        findChar(input.textarea(), key, forward, till)
-        input.state.setLastFind({ char: key, forward, till })
+        const char = value(event)
+        findChar(input.textarea(), char, forward, till)
+        input.state.setLastFind({ char, forward, till })
         input.state.clearPending()
         event.preventDefault()
         return true

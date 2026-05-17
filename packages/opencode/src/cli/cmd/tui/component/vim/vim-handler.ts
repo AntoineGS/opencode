@@ -59,6 +59,7 @@ import {
   toggleCase,
   toggleSelectionCase,
   wordEnd,
+  wordTextObjectOperation,
   yankLine,
   yankLineSpan,
   yankSelection,
@@ -77,6 +78,7 @@ export type VimEvent = {
 
 export type VimCopyMove = "up" | "down" | "left" | "right"
 type VimFindOperator = "f" | "F" | "t" | "T"
+type VimTextObjectScope = "inner" | "around"
 
 export function createVimHandler(input: {
   enabled: Accessor<boolean>
@@ -120,6 +122,7 @@ export function createVimHandler(input: {
 }) {
   let wantedColumn: VimWantedColumn | undefined
   let pendingOperatorFind: { operation: VimOperator; find: VimFindOperator } | undefined
+  let pendingTextObject: { operation: VimOperator; scope: VimTextObjectScope } | undefined
 
   function hasModifier(event: VimEvent) {
     return !!event.ctrl || !!event.meta || !!event.super
@@ -369,6 +372,46 @@ export function createVimHandler(input: {
     return false
   }
 
+  function startTextObject(event: VimEvent, operation: VimOperator, scope: VimTextObjectScope) {
+    pendingTextObject = { operation, scope }
+    input.state.setPending(operation, operation + (scope === "around" ? "a" : "i"))
+    event.preventDefault()
+    return true
+  }
+
+  function operatorTextObject(event: VimEvent, key: string, operation: VimOperator) {
+    if (key === "i" && !event.shift && !hasModifier(event)) return startTextObject(event, operation, "inner")
+    if (key === "a" && !event.shift && !hasModifier(event)) return startTextObject(event, operation, "around")
+    return false
+  }
+
+  function resolveTextObject(event: VimEvent, key: string, scope: VimTextObjectScope) {
+    if (key === "w" && !event.shift && !hasModifier(event)) {
+      return () => wordTextObjectOperation(input.textarea(), scope === "around")
+    }
+  }
+
+  function pendingTextObjectOperator(event: VimEvent, key: string): boolean {
+    if (!pendingTextObject) return false
+    if (input.state.pending() !== pendingTextObject.operation) {
+      pendingTextObject = undefined
+      return false
+    }
+
+    const textObject = pendingTextObject
+    const operation = resolveTextObject(event, key, textObject.scope)
+    pendingTextObject = undefined
+    if (operation) {
+      applyOperatorResult(operation, textObject.operation)
+      event.preventDefault()
+      return true
+    }
+
+    input.state.clearPending()
+    event.preventDefault()
+    return true
+  }
+
   function pendingFindOperator(event: VimEvent): boolean {
     if (!pendingOperatorFind) return false
     if (input.state.pending() !== pendingOperatorFind.find) {
@@ -440,6 +483,7 @@ export function createVimHandler(input: {
     }
 
     if (pendingFindOperator(event)) return true
+    if (pendingTextObjectOperator(event, key)) return true
 
     if (input.state.pending() === "vr" && input.state.isVisual()) {
       if (hasModifier(event)) {
@@ -694,6 +738,8 @@ export function createVimHandler(input: {
         return true
       }
 
+      if (operatorTextObject(event, key, "c")) return true
+
       if (paragraphOperator(key, "c")) {
         event.preventDefault()
         return true
@@ -706,6 +752,7 @@ export function createVimHandler(input: {
 
       if (operatorFind(event, key, "c")) return true
 
+      pendingTextObject = undefined
       input.state.clearPending()
     }
 
@@ -730,6 +777,8 @@ export function createVimHandler(input: {
         return true
       }
 
+      if (operatorTextObject(event, key, "d")) return true
+
       if (paragraphOperator(key, "d")) {
         event.preventDefault()
         return true
@@ -742,6 +791,7 @@ export function createVimHandler(input: {
 
       if (operatorFind(event, key, "d")) return true
 
+      pendingTextObject = undefined
       input.state.clearPending()
     }
 
@@ -766,6 +816,8 @@ export function createVimHandler(input: {
         return true
       }
 
+      if (operatorTextObject(event, key, "y")) return true
+
       if (paragraphOperator(key, "y")) {
         event.preventDefault()
         return true
@@ -776,6 +828,7 @@ export function createVimHandler(input: {
         return true
       }
 
+      pendingTextObject = undefined
       input.state.clearPending()
     }
 

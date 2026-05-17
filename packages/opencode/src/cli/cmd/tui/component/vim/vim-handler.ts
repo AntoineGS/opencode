@@ -50,6 +50,7 @@ import {
   pasteAfter,
   pasteBefore,
   previousParagraphOperation,
+  quoteTextObjectOperation,
   prevWordStart,
   replaceUnderCursor,
   replaceSelection,
@@ -131,8 +132,11 @@ export function createVimHandler(input: {
   function normalizedKeyName(event: VimEvent) {
     if (event.name === "slash") return "/"
     if (event.name === "at") return "@"
+    if (event.name === "quote") return '"'
+    if (event.name === "apostrophe") return "'"
+    if (event.name === "backtick") return "`"
     const text = event.sequence?.length === 1 ? event.sequence : event.raw?.length === 1 ? event.raw : undefined
-    if (text === "/" || text === "@") return text
+    if (text === "/" || text === "@" || text === '"' || text === "'" || text === "`") return text
     return event.name ?? ""
   }
 
@@ -237,7 +241,8 @@ export function createVimHandler(input: {
         input.state.clearPending()
         return false
       }
-      if (next.span) deleteSpan(input.textarea(), next.span)
+      if (next.span && next.span.end > next.span.start) deleteSpan(input.textarea(), next.span)
+      if (next.span && next.span.end === next.span.start) input.textarea().cursorOffset = next.span.start
       if (next.register) setRegister(next.register)
       input.state.clearPending()
       if (operation === "c") input.state.setMode("insert")
@@ -385,10 +390,13 @@ export function createVimHandler(input: {
     return false
   }
 
-  function resolveTextObject(event: VimEvent, key: string, scope: VimTextObjectScope) {
+  function resolveTextObject(event: VimEvent, key: string, scope: VimTextObjectScope, operation: VimOperator) {
     if ((key === "w" || isShifted(event, "w")) && !hasModifier(event)) {
       const big = isShifted(event, "w")
       return () => wordTextObjectOperation(input.textarea(), scope === "around", big)
+    }
+    if ((key === '"' || key === "'" || key === "`") && !hasModifier(event)) {
+      return () => quoteTextObjectOperation(input.textarea(), scope === "around", key)
     }
   }
 
@@ -400,7 +408,7 @@ export function createVimHandler(input: {
     }
 
     const textObject = pendingTextObject
-    const operation = resolveTextObject(event, key, textObject.scope)
+    const operation = resolveTextObject(event, key, textObject.scope, textObject.operation)
     pendingTextObject = undefined
     if (operation) {
       applyOperatorResult(operation, textObject.operation)

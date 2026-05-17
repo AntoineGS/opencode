@@ -464,6 +464,64 @@ function wordTextObjectAroundBlankSpan(text: string, blank: VimSpan, big: boolea
   return { start: blank.start, end }
 }
 
+export function quoteTextObjectOperation(textarea: TextareaRenderable, around: boolean, quote: string): VimOperatorResult {
+  const text = textarea.plainText
+  if (!text.length) return { span: null, register: null }
+
+  const pair = quoteTextObjectPair(text, textarea.cursorOffset, quote)
+  if (!pair) return { span: null, register: null }
+
+  const span = around ? quoteTextObjectAroundSpan(text, pair) : { start: pair.start + 1, end: pair.end }
+  if (span.start < span.end) return buildOperatorResult(text, span, null, false)
+  return { span: { start: span.start, end: span.start }, register: { text: "", linewise: false } }
+}
+
+function quoteTextObjectAroundSpan(text: string, pair: VimSpan) {
+  let end = pair.end + 1
+  while (end < text.length && text[end] !== "\n" && isHorizontalWhitespace(text[end])) end++
+  if (end > pair.end + 1) return { start: pair.start, end }
+
+  let start = pair.start
+  while (start > 0 && text[start - 1] !== "\n" && isHorizontalWhitespace(text[start - 1])) start--
+  return { start, end: pair.end + 1 }
+}
+
+function quoteTextObjectPair(text: string, cursor: number, quote: string): VimSpan | null {
+  const start = lineStart(text, cursor)
+  const end = lineEnd(text, cursor)
+  const positions = []
+  for (let position = start; position < end; position++) {
+    if (text[position] === quote && !isEscaped(text, position)) positions.push(position)
+  }
+  if (positions.length < 2) return null
+
+  const index = positions.findIndex((position) => position >= cursor)
+  if (index === -1) return null
+  if (positions[index] === cursor) {
+    const pairIndex = index % 2 === 0 ? index : index - 1
+    const pairEnd = positions[pairIndex + 1]
+    return pairEnd === undefined ? null : { start: positions[pairIndex]!, end: pairEnd }
+  }
+
+  const previous = positions[index - 1]
+  if (previous === undefined) {
+    const pairEnd = positions[1]
+    return pairEnd === undefined ? null : { start: positions[0]!, end: pairEnd }
+  }
+
+  return { start: previous, end: positions[index]! }
+}
+
+function isHorizontalWhitespace(char: string | undefined) {
+  return char === " " || char === "\t"
+}
+
+function isEscaped(text: string, position: number) {
+  let backslashes = 0
+  for (let index = position - 1; index >= 0 && text[index] === "\\"; index--) backslashes++
+  return backslashes % 2 === 1
+}
+
 function deleteOffsets(textarea: TextareaRenderable, startOffset: number, endOffset: number) {
   if (endOffset <= startOffset) return
   const end = Math.min(endOffset, textarea.plainText.length)

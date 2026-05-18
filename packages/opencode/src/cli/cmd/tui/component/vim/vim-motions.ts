@@ -464,6 +464,91 @@ function wordTextObjectAroundBlankSpan(text: string, blank: VimSpan, big: boolea
   return { start: blank.start, end }
 }
 
+export function bracketTextObjectOperation(
+  textarea: TextareaRenderable,
+  around: boolean,
+  bracket: string,
+  operation: VimOperator,
+): VimOperatorResult {
+  const text = textarea.plainText
+  if (!text.length) return { span: null, register: null }
+
+  const pair = bracketTextObjectPair(text, textarea.cursorOffset, bracket)
+  if (!pair) return { span: null, register: null }
+
+  const span = around ? { start: pair.start, end: pair.end + 1 } : bracketTextObjectInnerSpan(text, pair, operation)
+  const registerSpan = around ? null : bracketTextObjectInnerSpan(text, pair, "d")
+  if (span.start < span.end) return buildOperatorResult(text, span, registerSpan, false)
+  return { span: { start: span.start, end: span.start }, register: { text: "", linewise: false } }
+}
+
+function bracketTextObjectInnerSpan(text: string, pair: VimSpan, operation: VimOperator) {
+  const start = pair.start + 1
+  const end = pair.end
+  if (text[start] === "\n" && text[end - 1] === "\n") return { start: start + 1, end: operation === "c" ? end - 1 : end }
+  return { start, end }
+}
+
+function bracketTextObjectPair(text: string, cursor: number, bracket: string): VimSpan | null {
+  const pair = bracketTextObjectPairChars(bracket)
+  if (!pair) return null
+
+  const containing = bracketTextObjectContainingPair(text, cursor, 0, text.length, pair.open, pair.close)
+  if (containing) return containing
+
+  const pairStart = bracketTextObjectOpenAfterCursor(text, cursor, text.length, pair.open)
+  if (pairStart === null) return null
+
+  const pairEnd = bracketTextObjectClose(text, pairStart, text.length, pair.open, pair.close)
+  return pairEnd === null ? null : { start: pairStart, end: pairEnd }
+}
+
+function bracketTextObjectPairChars(bracket: string) {
+  if (bracket === "(" || bracket === ")") return { open: "(", close: ")" }
+  if (bracket === "[" || bracket === "]") return { open: "[", close: "]" }
+  if (bracket === "{" || bracket === "}") return { open: "{", close: "}" }
+  if (bracket === "<" || bracket === ">") return { open: "<", close: ">" }
+  return null
+}
+
+function bracketTextObjectContainingPair(
+  text: string,
+  cursor: number,
+  start: number,
+  end: number,
+  open: string,
+  close: string,
+): VimSpan | null {
+  const stack = []
+  let result: VimSpan | null = null
+  for (let index = start; index < end; index++) {
+    if (text[index] === open) stack.push(index)
+    if (text[index] !== close) continue
+
+    const pairStart = stack.pop()
+    if (pairStart === undefined || pairStart > cursor || index < cursor) continue
+    if (!result || pairStart > result.start) result = { start: pairStart, end: index }
+  }
+  return result
+}
+
+function bracketTextObjectOpenAfterCursor(text: string, cursor: number, end: number, open: string) {
+  const index = text.indexOf(open, cursor)
+  return index === -1 || index >= end ? null : index
+}
+
+function bracketTextObjectClose(text: string, start: number, end: number, open: string, close: string) {
+  let depth = 0
+  for (let index = start; index < end; index++) {
+    if (text[index] === open) depth++
+    if (text[index] === close) {
+      depth--
+      if (depth === 0) return index
+    }
+  }
+  return null
+}
+
 export function quoteTextObjectOperation(textarea: TextareaRenderable, around: boolean, quote: string): VimOperatorResult {
   const text = textarea.plainText
   if (!text.length) return { span: null, register: null }

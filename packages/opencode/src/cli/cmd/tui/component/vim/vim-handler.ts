@@ -50,6 +50,7 @@ import {
   pasteAfter,
   pasteBefore,
   previousParagraphOperation,
+  bracketTextObjectOperation,
   quoteTextObjectOperation,
   prevWordStart,
   replaceUnderCursor,
@@ -136,7 +137,15 @@ export function createVimHandler(input: {
     if (event.name === "apostrophe") return "'"
     if (event.name === "backtick") return "`"
     const text = event.sequence?.length === 1 ? event.sequence : event.raw?.length === 1 ? event.raw : undefined
-    if (text === "/" || text === "@" || text === '"' || text === "'" || text === "`") return text
+    if (text && (text === "/" || text === "@" || text === '"' || text === "'" || text === "`" || "()[]{}<>".includes(text))) return text
+    if (event.shift) {
+      if (event.name === "9") return "("
+      if (event.name === "0") return ")"
+      if (event.name === "[") return "{"
+      if (event.name === "]") return "}"
+      if (event.name === ",") return "<"
+      if (event.name === ".") return ">"
+    }
     return event.name ?? ""
   }
 
@@ -397,6 +406,9 @@ export function createVimHandler(input: {
     }
     if ((key === '"' || key === "'" || key === "`") && !hasModifier(event)) {
       return () => quoteTextObjectOperation(input.textarea(), scope === "around", key)
+    }
+    if ("()[]{}<>".includes(key) && !hasModifier(event)) {
+      return () => bracketTextObjectOperation(input.textarea(), scope === "around", key, operation)
     }
   }
 

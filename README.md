@@ -12,25 +12,18 @@ opencode fork with vim mode. Syncs with upstream releases.
 
 ## Install
 
-### npm
-
 ```bash
+# npm
 npm i -g @leohenon/ocv
-```
 
-### Homebrew
-
-```bash
+# Homebrew
 brew install leohenon/tap/ocv
-```
 
-### curl
-
-```bash
+# curl
 curl -fsSL https://raw.githubusercontent.com/leohenon/opencode-vim/ocv/install.sh | sudo sh
 ```
 
-Then run:
+## Usage
 
 ```bash
 ocv
@@ -39,10 +32,13 @@ ocv
 ## Update
 
 ```bash
+# npm
 npm i -g @leohenon/ocv@latest
-# or
+
+# Homebrew
 brew upgrade ocv
-# or
+
+# built-in updater
 ocv update
 ```
 
@@ -52,31 +48,31 @@ ocv update
 
 Toggle via command palette (`Ctrl+p` -> `Toggle vim mode`).
 
-| Category | Keys |
-| --- | --- |
-| Character / word | `h`, `j`, `k`, `l`, `w`, `b`, `e`, `W`, `B`, `E` |
-| Line / buffer | `0`, `^`, `_`, `$`, `gg`, `G` |
-| Matching / paragraph movement | `%`, `{`, `}` |
-| Find / till movement | `f`, `F`, `t`, `T`, `;`, `,` |
-| Scroll | `Ctrl+e`, `Ctrl+y`, `Ctrl+d`, `Ctrl+u`, `Ctrl+f`, `Ctrl+b` |
-| Insert / replace | `i`, `I`, `a`, `A`, `o`, `O`, `R` |
-| Character / line edit | `r`, `x`, `~`, `s`, `S`, `J`, `C`, `dd`, `cc` |
-| Word changes | `cw`, `cb`, `ciw`, `caw`, `ciW`, `caW` |
-| Word deletes | `dw`, `db`, `diw`, `daw`, `diW`, `daW` |
-| Quote changes | `ci"`, `ca"`, `ci'`, `ca'`, ``ci` ``, ``ca` `` |
-| Quote deletes | `di"`, `da"`, `di'`, `da'`, ``di` ``, ``da` `` |
-| Bracket changes | `ci(`, `ca(`, `ci[`, `ca[`, `ci{`, `ca{`, `ci<`, `ca<` |
-| Bracket deletes | `di(`, `da(`, `di[`, `da[`, `di{`, `da{`, `di<`, `da<` |
-| Find / till operators | `cf`, `cF`, `ct`, `cT`, `df`, `dF`, `dt`, `dT` |
-| Matching / paragraph operators | `c%`, `d%`, `c}`, `c{`, `d}`, `d{` |
-| Line / word yanks | `yy`, `yw`, `yiw`, `yaw`, `yiW`, `yaW` |
-| Quote text object yanks | `yi"`, `ya"`, `yi'`, `ya'`, ``yi` ``, ``ya` `` |
-| Bracket text object yanks | `yi(`, `ya(`, `yi[`, `ya[`, `yi{`, `ya{`, `yi<`, `ya<` |
-| Matching / paragraph yanks | `y%`, `y}`, `y{` |
-| Put / undo / repeat | `p`, `P`, `u`, `Ctrl+r`, `.` |
-| Visual selection | `v`, `V` |
-
 > Unicode word boundaries are not supported.
+
+| Category                       | Keys                                                       |
+| ------------------------------ | ---------------------------------------------------------- |
+| Character / word               | `h`, `j`, `k`, `l`, `w`, `b`, `e`, `W`, `B`, `E`           |
+| Line / buffer                  | `0`, `^`, `_`, `$`, `gg`, `G`                              |
+| Matching / paragraph           | `%`, `{`, `}`                                              |
+| Find / till                    | `f`, `F`, `t`, `T`, `;`, `,`                               |
+| Scroll                         | `Ctrl+e`, `Ctrl+y`, `Ctrl+d`, `Ctrl+u`, `Ctrl+f`, `Ctrl+b` |
+| Insert / replace               | `i`, `I`, `a`, `A`, `o`, `O`, `R`                          |
+| Character / line edit          | `r`, `x`, `~`, `s`, `S`, `J`, `C`, `dd`, `cc`              |
+| Word changes                   | `cw`, `cb`, `ciw`, `caw`, `ciW`, `caW`                     |
+| Word deletes                   | `dw`, `db`, `diw`, `daw`, `diW`, `daW`                     |
+| Quote changes                  | `ci"`, `ca"`, `ci'`, `ca'`, ``ci` ``, ``ca` ``             |
+| Quote deletes                  | `di"`, `da"`, `di'`, `da'`, ``di` ``, ``da` ``             |
+| Bracket changes                | `ci(`, `ca(`, `ci[`, `ca[`, `ci{`, `ca{`, `ci<`, `ca<`     |
+| Bracket deletes                | `di(`, `da(`, `di[`, `da[`, `di{`, `da{`, `di<`, `da<`     |
+| Find / till operators          | `cf`, `cF`, `ct`, `cT`, `df`, `dF`, `dt`, `dT`             |
+| Matching / paragraph operators | `c%`, `d%`, `c}`, `c{`, `d}`, `d{`                         |
+| Line / word yanks              | `yy`, `yw`, `yiw`, `yaw`, `yiW`, `yaW`                     |
+| Quote yanks                    | `yi"`, `ya"`, `yi'`, `ya'`, ``yi` ``, ``ya` ``             |
+| Bracket yanks                  | `yi(`, `ya(`, `yi[`, `ya[`, `yi{`, `ya{`, `yi<`, `ya<`     |
+| Matching / paragraph yanks     | `y%`, `y}`, `y{`                                           |
+| Put / undo / repeat            | `p`, `P`, `u`, `Ctrl+r`, `.`                               |
+| Visual selection               | `v`, `V`                                                   |
 
 > [!NOTE]
 > `<leader>y` copies the prompt selection when present; configure it with `keybinds.prompt_copy_selection`.
@@ -90,7 +86,9 @@ Claude subscriptions built-in with `/connect`. No plugins or configuration neede
 
 Text selection from the chat session view.
 
-<img src=".github/demo-copy-mode.gif" style="border: 1px solid #555; border-radius: 4px;" />
+> Copy mode collapses code diffs into a single column for easy copying.
+
+<img src=".github/copy-demo.gif" style="border: 1px solid #555; border-radius: 4px;" />
 
 - Enter copy mode with `<leader>v` or `Ctrl+W k`.
 - Navigate with `h` `j` `k` `l` or arrow keys (`Left` `Down` `Up` `Right`).
@@ -108,15 +106,11 @@ Text selection from the chat session view.
 > [!TIP]
 > Configure the entry key with `keybinds.copy_mode`.
 
-> Copy mode collapses code diffs into a single column for easy copying.
-
-<img src=".github/copy-demo.gif" style="border: 1px solid #555; border-radius: 4px;" />
-
 ### Prompt Input
 
 Prompt input height is configurable with `prompt_max_height` in `tui.json`.
 
-When the prompt grows past the visible area, a scrollbar appears automatically.
+A scrollbar appears when the prompt exceeds the visible area. `gg` / `G` focus the prompt input when typing.
 
 ```json
 {
@@ -125,13 +119,9 @@ When the prompt grows past the visible area, a scrollbar appears automatically.
 }
 ```
 
+> Note: Setting `prompt_max_height` above `40` is not recommended.
+
 <img src=".github/scrollbar.gif" style="border: 1px solid #555; border-radius: 4px;" />
-
-> [!NOTE]
-> When typing `gg` / `G` focus the prompt input.
-
-> [!WARNING]
-> Setting `prompt_max_height` above `40` is not recommended.
 
 ### Minimal UI
 

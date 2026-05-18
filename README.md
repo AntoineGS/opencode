@@ -52,31 +52,35 @@ ocv update
 
 Toggle via command palette (`Ctrl+p` -> `Toggle vim mode`).
 
-**Movement**
+| Category | Keys |
+| --- | --- |
+| Character / word | `h`, `j`, `k`, `l`, `w`, `b`, `e`, `W`, `B`, `E` |
+| Line / buffer | `0`, `^`, `_`, `$`, `gg`, `G` |
+| Matching / paragraph movement | `%`, `{`, `}` |
+| Find / till movement | `f`, `F`, `t`, `T`, `;`, `,` |
+| Scroll | `Ctrl+e`, `Ctrl+y`, `Ctrl+d`, `Ctrl+u`, `Ctrl+f`, `Ctrl+b` |
+| Insert / replace | `i`, `I`, `a`, `A`, `o`, `O`, `R` |
+| Character / line edit | `r`, `x`, `~`, `s`, `S`, `J`, `C`, `dd`, `cc` |
+| Word changes | `cw`, `cb`, `ciw`, `caw`, `ciW`, `caW` |
+| Word deletes | `dw`, `db`, `diw`, `daw`, `diW`, `daW` |
+| Quote changes | `ci"`, `ca"`, `ci'`, `ca'`, ``ci` ``, ``ca` `` |
+| Quote deletes | `di"`, `da"`, `di'`, `da'`, ``di` ``, ``da` `` |
+| Bracket changes | `ci(`, `ca(`, `ci[`, `ca[`, `ci{`, `ca{`, `ci<`, `ca<` |
+| Bracket deletes | `di(`, `da(`, `di[`, `da[`, `di{`, `da{`, `di<`, `da<` |
+| Find / till operators | `cf`, `cF`, `ct`, `cT`, `df`, `dF`, `dt`, `dT` |
+| Matching / paragraph operators | `c%`, `d%`, `c}`, `c{`, `d}`, `d{` |
+| Line / word yanks | `yy`, `yw`, `yiw`, `yaw`, `yiW`, `yaW` |
+| Quote text object yanks | `yi"`, `ya"`, `yi'`, `ya'`, ``yi` ``, ``ya` `` |
+| Bracket text object yanks | `yi(`, `ya(`, `yi[`, `ya[`, `yi{`, `ya{`, `yi<`, `ya<` |
+| Matching / paragraph yanks | `y%`, `y}`, `y{` |
+| Put / undo / repeat | `p`, `P`, `u`, `Ctrl+r`, `.` |
+| Visual selection | `v`, `V` |
 
-`h` `j` `k` `l` `w` `b` `e` `W` `B` `E` `0` `^` `_` `$` `%` `{` `}` `gg` `G`
-`f` `F` `t` `T` `;` `,`
-`Ctrl+e` `Ctrl+y` `Ctrl+d` `Ctrl+u` `Ctrl+f` `Ctrl+b`
-
-> [!NOTE]
 > Unicode word boundaries are not supported.
 
-**Editing**
-
-`i` `I` `a` `A` `o` `O` `R` `r` `x` `~` `dd` `dw` `db` `diw` `daw` `diW` `daW` `di"` `da"` `di'` `da'` <code>di`</code> <code>da`</code> `di(` `da(` `di[` `da[` `di{` `da{` `di<` `da<` `df` `dF` `dt` `dT` `d%` `d}` `d{` `cc` `cw` `cb` `ciw` `caw` `ciW` `caW` `ci"` `ca"` `ci'` `ca'` <code>ci`</code> <code>ca`</code> `ci(` `ca(` `ci[` `ca[` `ci{` `ca{` `ci<` `ca<` `cf` `cF` `ct` `cT` `C` `c%` `c}` `c{` `s` `S` `J`
-
-**yank / put / undo / repeat**
-
-`yy` `yw` `yiw` `yaw` `yiW` `yaW` `yi"` `ya"` `yi'` `ya'` <code>yi`</code> <code>ya`</code> `yi(` `ya(` `yi[` `ya[` `yi{` `ya{` `yi<` `ya<` `y%` `y}` `y{` `p` `P` `u` `ctrl+r` `.`
-
-- Copy the current prompt selection with `<leader>y` (default: `ctrl+x` then `y`).
-- Configure it with `keybinds.prompt_copy_selection`.
-- If a prompt selection exists, `<leader>y` copies it. Otherwise it keeps the existing message copy behavior.
-- To sync yanks and pastes with the system clipboard, see [System clipboard register](#system-clipboard-register).
-
-**Visual**
-
-`v` `V`
+> [!NOTE]
+> `<leader>y` copies the prompt selection when present; configure it with `keybinds.prompt_copy_selection`.
+> For clipboard sync, see [System clipboard register](#system-clipboard-register).
 
 ### Anthropic OAuth
 
@@ -85,8 +89,6 @@ Claude subscriptions built-in with `/connect`. No plugins or configuration neede
 ### Copy Mode
 
 Text selection from the chat session view.
-
-Works similarly to tmux copy mode within opencode tui.
 
 <img src=".github/demo-copy-mode.gif" style="border: 1px solid #555; border-radius: 4px;" />
 
@@ -104,9 +106,8 @@ Works similarly to tmux copy mode within opencode tui.
 - `H` / `M` / `L` jump to the top / middle / bottom of the viewport.
 
 > [!TIP]
-> Configure the entry key with `keybinds.copy_mode` in your config if you want something other than `<leader>v`.
+> Configure the entry key with `keybinds.copy_mode`.
 
-> [!NOTE]
 > Copy mode collapses code diffs into a single column for easy copying.
 
 <img src=".github/copy-demo.gif" style="border: 1px solid #555; border-radius: 4px;" />
@@ -197,5 +198,6 @@ Have a suggestion? [Open an issue](https://github.com/leohenon/opencode-vim/issu
 
 ## Contributors
 
-<a href="https://github.com/reobin"><img src="https://github.com/reobin.png" width="40" height="40" /></a> <a href="https://github.com/BrettKulp"><img src="https://github.com/BrettKulp.png" width="40" height="40" /></a> <a href="https://github.com/lamiphil"><img src="https://github.com/lamiphil.png" width="40" height="40" /></a> <a href="https://github.com/XPhyro"><img src="https://github.com/XPhyro.png" width="40" height="40" /></a>
+Thanks to everyone who contributed.
 
+<a href="https://github.com/reobin"><img src="https://github.com/reobin.png" width="40" height="40" /></a> <a href="https://github.com/BrettKulp"><img src="https://github.com/BrettKulp.png" width="40" height="40" /></a> <a href="https://github.com/lamiphil"><img src="https://github.com/lamiphil.png" width="40" height="40" /></a> <a href="https://github.com/XPhyro"><img src="https://github.com/XPhyro.png" width="40" height="40" /></a>

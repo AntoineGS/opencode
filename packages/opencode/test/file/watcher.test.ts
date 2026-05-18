@@ -1,5 +1,6 @@
 import { describe, expect } from "bun:test"
 import path from "path"
+import { realpath } from "fs/promises"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { ConfigProvider, Deferred, Effect, Layer, Option } from "effect"
 import { TestInstance, provideInstance } from "../fixture/fixture"
@@ -133,11 +134,12 @@ function ready(directory: string) {
 
     if (!(yield* fs.existsSafe(head))) return
 
+    const realHead = yield* Effect.promise(() => realpath(head).catch(() => head))
     const branch = `watch-${Math.random().toString(36).slice(2)}`
     const hash = (yield* git.run(["rev-parse", "HEAD"], { cwd: directory })).text()
     yield* nextUpdate(
       directory,
-      (evt) => evt.file === head && evt.event !== "unlink",
+      (evt) => (evt.file === head || evt.file === realHead) && evt.event !== "unlink",
       fs
         .writeFileString(path.join(directory, ".git", "refs", "heads", branch), hash.trim() + "\n")
         .pipe(Effect.andThen(fs.writeFileString(head, `ref: refs/heads/${branch}\n`))),

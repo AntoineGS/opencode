@@ -119,7 +119,7 @@ A scrollbar appears when the prompt exceeds the visible area. `gg` / `G` focus t
 }
 ```
 
-> Note: Setting `prompt_max_height` above `40` is not recommended.
+> Setting `prompt_max_height` above `40` is not recommended.
 
 <img src=".github/scrollbar.gif" style="border: 1px solid #555; border-radius: 4px;" />
 

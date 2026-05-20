@@ -148,20 +148,23 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          gh label create ci --repo ${{ github.repository }} --color D73A4A --description "Continuous integration" 2>/dev/null || true
           issues=$(gh issue list --repo ${{ github.repository }} --state open --limit 1000 --json number,title -q '.[] | select(.title == "[ci]: sync upstream failed" or .title == "[actions]: sync upstream failed") | [.number, .title] | @tsv')
           tracker=$(printf '%s\n' "$issues" | awk -F '\t' '$2 == "[ci]: sync upstream failed" { print $1; exit }')
           if [ -z "$tracker" ]; then
             tracker=$(printf '%s\n' "$issues" | awk -F '\t' 'NF { print $1; exit }')
             if [ -n "$tracker" ]; then
-              gh issue edit "$tracker" --repo ${{ github.repository }} --title "[ci]: sync upstream failed"
+              gh issue edit "$tracker" --repo ${{ github.repository }} --title "[ci]: sync upstream failed" --add-label ci
             fi
           fi
           if [ -z "$tracker" ]; then
             gh issue create --repo ${{ github.repository }} \
               --title "[ci]: sync upstream failed" \
+              --label ci \
               --body "Sync workflow failed. Likely a merge conflict. [View run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
             exit 0
           fi
+          gh issue edit "$tracker" --repo ${{ github.repository }} --add-label ci
           printf '%s\n' "$issues" | awk -F '\t' -v tracker="$tracker" 'NF && $1 != tracker { print $1 }' | while read -r number; do
             gh issue close "$number" --repo ${{ github.repository }} --comment "Closing duplicate; tracking this failure in #$tracker."
           done

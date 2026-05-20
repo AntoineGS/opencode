@@ -44,6 +44,28 @@ jobs:
       - name: Install dependencies
         run: bun install
 
+      - name: Add release contributors
+        if: github.ref_type == 'branch'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ inputs.version }}"
+          PREV_TAG=$(git tag --list 'v*-ocv.*' --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+-ocv\.[0-9]+\.[0-9]+$' | grep -vx "v$VERSION" | head -n 1 || true)
+          if [ -z "$PREV_TAG" ]; then
+            echo "No previous ocv release found, skipping contributor update"
+            exit 0
+          fi
+
+          bun script/update-contributors.ts --from "$PREV_TAG" --to HEAD --repo "$GITHUB_REPOSITORY" --base ocv
+          if git diff --quiet README.md; then
+            exit 0
+          fi
+
+          git add README.md
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -m "docs: add release contributors"
+          git push origin HEAD:${{ github.ref_name }}
+
       - name: Build CLI
         run: bun run packages/opencode/script/build.ts --single=false
         env:
@@ -90,7 +112,7 @@ jobs:
           PATCH="${VERSION##*-ocv.}"
           NOTES_FILE="$RUNNER_TEMP/ocv-release-notes.txt"
           PRS_FILE="$RUNNER_TEMP/ocv-release-prs.txt"
-          PREV_TAG=$(git tag --list 'v*-ocv.*' --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+-ocv\.[0-9]+\.[0-9]+$' | grep -vx "v$VERSION" | head -n 1)
+          PREV_TAG=$(git tag --list 'v*-ocv.*' --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+-ocv\.[0-9]+\.[0-9]+$' | grep -vx "v$VERSION" | head -n 1 || true)
           PREV_PATCH=""
 
           if [ -n "$PREV_TAG" ]; then
@@ -135,7 +157,7 @@ jobs:
               --title "v$VERSION" \
               --notes-file "$NOTES_FILE" \
               --repo "$GITHUB_REPOSITORY" \
-              --target "$GITHUB_SHA" \
+              --target "$(git rev-parse HEAD)" \
               "$DIST"/*
           fi
         env:

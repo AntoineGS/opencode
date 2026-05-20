@@ -5,6 +5,10 @@ on:
     - cron: "0 */6 * * *"
   workflow_dispatch:
 
+permissions:
+  contents: read
+  issues: write
+
 concurrency:
   group: sync-upstream
   cancel-in-progress: false
@@ -129,7 +133,7 @@ jobs:
       - name: Close failure issue on success
         if: success()
         env:
-          GH_TOKEN: ${{ secrets.SYNC_PAT }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           issues=$(gh issue list --repo ${{ github.repository }} --state open --limit 1000 --json number,title -q '.[] | select(.title == "[ci]: sync upstream failed" or .title == "[actions]: sync upstream failed") | .number')
           if [ -z "$issues" ]; then
@@ -142,7 +146,7 @@ jobs:
       - name: Notify on failure
         if: failure()
         env:
-          GH_TOKEN: ${{ secrets.SYNC_PAT }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           issues=$(gh issue list --repo ${{ github.repository }} --state open --limit 1000 --json number,title -q '.[] | select(.title == "[ci]: sync upstream failed" or .title == "[actions]: sync upstream failed") | [.number, .title] | @tsv')
           tracker=$(printf '%s\n' "$issues" | awk -F '\t' '$2 == "[ci]: sync upstream failed" { print $1; exit }')

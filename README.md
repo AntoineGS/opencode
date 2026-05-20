@@ -192,19 +192,10 @@ local ocv_cmd = "bash -c 'exec -a opencode ocv --port'"
 vim.g.opencode_opts = {
   server = {
     start = function()
-      require("opencode.terminal").open(ocv_cmd, {
-        split = "right",
-        width = math.floor(vim.o.columns * 0.35),
-      })
-    end,
-    stop = function()
-      require("opencode.terminal").close()
+      require("opencode.terminal").open(ocv_cmd)
     end,
     toggle = function()
-      require("opencode.terminal").toggle(ocv_cmd, {
-        split = "right",
-        width = math.floor(vim.o.columns * 0.35),
-      })
+      require("opencode.terminal").toggle(ocv_cmd)
     end,
   },
 }

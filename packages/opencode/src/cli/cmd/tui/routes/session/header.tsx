@@ -9,8 +9,7 @@ import { useKV } from "../../context/kv"
 import { useProject } from "../../context/project"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { useTerminalDimensions } from "@opentui/solid"
-import { useCommandPalette } from "../../context/command-palette"
-import { useCommandShortcut } from "../../keymap"
+import { useCommandShortcut, useOpencodeKeymap } from "../../keymap"
 
 const Title = (props: { session: Accessor<Session> }) => {
   const { theme } = useTheme()
@@ -85,7 +84,7 @@ export function Header() {
   const { theme } = useTheme()
   const kv = useKV()
   const mini = createMemo(() => kv.get("ui_minimal", false))
-  const command = useCommandPalette()
+  const keymap = useOpencodeKeymap()
   const parentShortcut = useCommandShortcut("session.parent")
   const previousShortcut = useCommandShortcut("session.child.previous")
   const nextShortcut = useCommandShortcut("session.child.next")
@@ -129,7 +128,7 @@ export function Header() {
                 <box
                   onMouseOver={() => setHover("parent")}
                   onMouseOut={() => setHover(null)}
-                  onMouseUp={() => command.run("session.parent")}
+                  onMouseUp={() => keymap.dispatchCommand("session.parent")}
                   backgroundColor={hover() === "parent" ? theme.backgroundElement : theme.backgroundPanel}
                 >
                   <text fg={theme.text}>
@@ -142,7 +141,7 @@ export function Header() {
                 <box
                   onMouseOver={() => setHover("prev")}
                   onMouseOut={() => setHover(null)}
-                  onMouseUp={() => command.run("session.child.previous")}
+                  onMouseUp={() => keymap.dispatchCommand("session.child.previous")}
                   backgroundColor={hover() === "prev" ? theme.backgroundElement : theme.backgroundPanel}
                 >
                   <text fg={theme.text}>
@@ -155,7 +154,7 @@ export function Header() {
                 <box
                   onMouseOver={() => setHover("next")}
                   onMouseOut={() => setHover(null)}
-                  onMouseUp={() => command.run("session.child.next")}
+                  onMouseUp={() => keymap.dispatchCommand("session.child.next")}
                   backgroundColor={hover() === "next" ? theme.backgroundElement : theme.backgroundPanel}
                 >
                   <text fg={theme.text}>

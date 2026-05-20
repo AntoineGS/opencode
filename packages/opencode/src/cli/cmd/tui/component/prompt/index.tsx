@@ -70,8 +70,14 @@ import { emptyRows } from "./empty-selection"
 import { CONSOLE_MANAGED_ICON, consoleManagedProviderLabel } from "@tui/util/provider-origin"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { type WorkspaceStatus } from "../workspace-label"
-import { useCommandPalette } from "../../context/command-palette"
-import { useBindings, useCommandShortcut, useLeaderActive, useOpencodeKeymap, VIM_WINDOW_TOKEN } from "../../keymap"
+import {
+  OPENCODE_BASE_MODE,
+  useBindings,
+  useCommandShortcut,
+  useLeaderActive,
+  useOpencodeKeymap,
+  VIM_WINDOW_TOKEN,
+} from "../../keymap"
 
 export type PromptProps = {
   sessionID?: string
@@ -196,7 +202,6 @@ export function Prompt(props: PromptProps) {
   const status = createMemo(() => sync.data.session_status?.[props.sessionID ?? ""] ?? { type: "idle" })
   const history = usePromptHistory()
   const stash = usePromptStash()
-  const command = useCommandPalette()
   const keymap = useOpencodeKeymap()
   const agentShortcut = useCommandShortcut("agent.cycle")
   const paletteShortcut = useCommandShortcut("command.palette.show")
@@ -654,12 +659,12 @@ export function Prompt(props: PromptProps) {
     setRegister: setVimRegister,
     submit,
     scroll(action) {
-      if (action === "line-down") command.run("session.line.down")
-      if (action === "line-up") command.run("session.line.up")
-      if (action === "half-down") command.run("session.half.page.down")
-      if (action === "half-up") command.run("session.half.page.up")
-      if (action === "page-down") command.run("session.page.down")
-      if (action === "page-up") command.run("session.page.up")
+      if (action === "line-down") keymap.dispatchCommand("session.line.down")
+      if (action === "line-up") keymap.dispatchCommand("session.line.up")
+      if (action === "half-down") keymap.dispatchCommand("session.half.page.down")
+      if (action === "half-up") keymap.dispatchCommand("session.half.page.up")
+      if (action === "page-down") keymap.dispatchCommand("session.page.down")
+      if (action === "page-up") keymap.dispatchCommand("session.page.up")
     },
     jump(action) {
       if (action === "high" || action === "middle" || action === "low") {
@@ -670,8 +675,8 @@ export function Prompt(props: PromptProps) {
         promptJump(action)
         return
       }
-      if (action === "top") command.run("session.first")
-      if (action === "bottom") command.run("session.last")
+      if (action === "top") keymap.dispatchCommand("session.first")
+      if (action === "bottom") keymap.dispatchCommand("session.last")
     },
     navigate(action) {
       handleNavigation(action)
@@ -1093,7 +1098,7 @@ export function Prompt(props: PromptProps) {
   }))
 
   useBindings(() => ({
-    enabled: command.matcher,
+    mode: OPENCODE_BASE_MODE,
     bindings: tuiConfig.keybinds.gather("prompt.palette", [
       "prompt.submit",
       "prompt.editor",
@@ -2403,7 +2408,7 @@ export function Prompt(props: PromptProps) {
                       fg={theme.textMuted}
                       onMouseUp={() => {
                         if (!canSwitchOrgs()) return
-                        command.run("console.org.switch")
+                        keymap.dispatchCommand("console.org.switch")
                       }}
                     >
                       {`${CONSOLE_MANAGED_ICON} ${activeOrgName()}`}

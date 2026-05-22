@@ -2,25 +2,21 @@
 
 # OpenCode Vim
 
-[![npm version](https://img.shields.io/npm/v/@leohenon/ocv?style=flat-square&logo=npm&logoColor=white)](https://www.npmjs.com/package/@leohenon/ocv) [![CI](https://img.shields.io/github/actions/workflow/status/leohenon/opencode-vim/ci.yml?branch=ocv&style=flat-square&logo=github&logoColor=white&label=CI&color=3f8f4d)](https://github.com/leohenon/opencode-vim/actions/workflows/ci.yml) [![Last commit](https://img.shields.io/github/last-commit/leohenon/opencode-vim/ocv?style=flat-square&logo=git&logoColor=white&color=7fa6a3)](https://github.com/leohenon/opencode-vim/commits/ocv) [![Bun](https://img.shields.io/badge/runtime-Bun-f9f1e1?style=flat-square&logo=bun&logoColor=white)](https://bun.sh)
+[![npm version](https://img.shields.io/npm/v/@leohenon/ocv?style=flat-square&logo=npm&logoColor=white)](https://www.npmjs.com/package/@leohenon/ocv) [![CI](https://img.shields.io/github/actions/workflow/status/leohenon/opencode-vim/ci.yml?branch=ocv&style=flat-square&logo=github&logoColor=white&label=CI&color=3f8f4d)](https://github.com/leohenon/opencode-vim/actions/workflows/ci.yml) [![Last commit](https://img.shields.io/github/last-commit/leohenon/opencode-vim/ocv?style=flat-square&logo=git&logoColor=white&color=7fa6a3)](https://github.com/leohenon/opencode-vim/commits/ocv) [![Bun](https://img.shields.io/badge/runtime-Bun-f9f1e1?style=flat-square&logo=bun&logoColor=white)](https://bun.sh) [![Website](https://img.shields.io/badge/website-opencode--vim-7fa6a3?style=flat-square)](https://leohenon.github.io/opencode-vim/)
 
-opencode fork with vim mode. Syncs with upstream releases.
+OpenCode fork with vim mode. Syncs with upstream releases.
 
 </div>
 
-<img src=".github/demo.gif" style="border: 1px solid #555; border-radius: 4px;" />
-
-## Install
+## Installation
 
 ```bash
-# npm
-npm i -g @leohenon/ocv
-
-# Homebrew
-brew install leohenon/tap/ocv
-
 # curl
 curl -fsSL https://raw.githubusercontent.com/leohenon/opencode-vim/ocv/install.sh | sh
+
+# Package managers
+npm i -g @leohenon/ocv
+brew install leohenon/tap/ocv
 ```
 
 Curl installs to `~/.ocv/bin`. Set `OCV_INSTALL_DIR` to install elsewhere.
@@ -34,14 +30,12 @@ ocv
 ## Update
 
 ```bash
-# npm
-npm i -g @leohenon/ocv@latest
-
-# Homebrew
-brew upgrade ocv
-
 # built-in updater
 ocv update
+
+# Package managers
+npm i -g @leohenon/ocv@latest
+brew upgrade ocv
 ```
 
 ## Features
@@ -80,37 +74,43 @@ Toggle via command palette (`Ctrl+p` -> `Toggle vim mode`).
 > `<leader>y` copies the prompt selection when present; configure it with `keybinds.prompt_copy_selection`.
 > For clipboard sync, see [System clipboard register](#system-clipboard-register).
 
-### Anthropic OAuth
-
-Claude subscriptions built-in with `/connect`. No plugins or configuration needed.
-
 ### Copy Mode
 
 Text selection from the chat session view.
 
 > Copy mode collapses code diffs into a single column for easy copying.
 
-<img src=".github/copy-demo.gif" style="border: 1px solid #555; border-radius: 4px;" />
-
-- Enter copy mode with `<leader>v` or `Ctrl+W k`.
-- Navigate with `h` `j` `k` `l` or arrow keys (`Left` `Down` `Up` `Right`).
-- Press `v` / `V` to start character-wise or line-wise selection.
-- `y/yy` yanks to the vim register.
-- `Enter` copies to the system clipboard.
-- `Y` yanks to the vim register and scrolls to the bottom.
-- `Shift+Enter` copies to the system clipboard and scrolls to the bottom.
-- `Escape` exits visual mode, `q` exits copy mode and scrolls to the bottom.
-- `Ctrl+W j` exits copy mode without scrolling; `Ctrl+W w` toggles copy mode.
-- `i` focuses the prompt input in insert mode without scrolling.
-- `z` `zt` `zz` `zb` adjust copy-mode scroll positioning.
-- `H` / `M` / `L` jump to the top / middle / bottom of the viewport.
+| Keys                           | Action                                                  |
+| ------------------------------ | ------------------------------------------------------- |
+| `<leader>v`, `Ctrl+W k`        | Enter copy mode                                         |
+| `h`, `j`, `k`, `l`, arrow keys | Navigate                                                |
+| `v`, `V`                       | Start character-wise or line-wise selection             |
+| `y`, `yy`                      | Yank to the vim register                                |
+| `Enter`                        | Copy to the system clipboard                            |
+| `Y`                            | Yank to the vim register and scroll to the bottom       |
+| `Shift+Enter`                  | Copy to the system clipboard and scroll to the bottom   |
+| `Escape`                       | Exit visual mode                                        |
+| `q`                            | Exit copy mode and scroll to the bottom                 |
+| `Ctrl+W j`                     | Exit copy mode without scrolling                        |
+| `Ctrl+W w`                     | Toggle copy mode                                        |
+| `i`                            | Focus the prompt input in insert mode without scrolling |
+| `z`, `zt`, `zz`, `zb`          | Adjust copy-mode scroll positioning                     |
+| `H`, `M`, `L`                  | Jump to the top, middle, or bottom of the viewport      |
 
 > [!TIP]
 > Configure the entry key with `keybinds.copy_mode`.
 
-### Prompt Input
+### Minimal UI
 
-Prompt input height is configurable with `prompt_max_height` in `tui.json`.
+Hides extra UI hints and tips.
+
+Toggle via command palette (`Ctrl+p` -> `Toggle minimal ui`).
+
+## Configuration
+
+### Prompt input height
+
+Prompt input max height is configurable with `prompt_max_height` in `tui.json`.
 
 A scrollbar appears when the prompt exceeds the visible area. `gg` / `G` focus the prompt input when typing.
 
@@ -122,20 +122,6 @@ A scrollbar appears when the prompt exceeds the visible area. `gg` / `G` focus t
 ```
 
 > Setting `prompt_max_height` above `40` is not recommended.
-
-<img src=".github/scrollbar.gif" style="border: 1px solid #555; border-radius: 4px;" />
-
-### Minimal UI
-
-Hides extra UI hints and tips.
-
-| Default                                            | Minimal                                           |
-| -------------------------------------------------- | ------------------------------------------------- |
-| <img src=".github/minimal-ui-off.png" width="400"> | <img src=".github/minimal-ui-on.png" width="400"> |
-
-Toggle via command palette (`Ctrl+p` -> `Toggle minimal ui`).
-
-## Configuration
 
 ### Submit behavior
 

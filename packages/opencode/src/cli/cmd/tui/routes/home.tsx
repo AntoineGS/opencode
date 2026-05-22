@@ -99,17 +99,12 @@ export function Home() {
         </box>
         <box height={1} minHeight={0} flexShrink={1} />
         <box width="100%" maxWidth={75} zIndex={1000} paddingTop={1} flexShrink={0}>
-          <TuiPluginRuntime.Slot
-            name="home_prompt"
-            mode="replace"
-            workspace_id={project.workspace.current()}
-            ref={bind}
-          >
+          <TuiPluginRuntime.Slot name="home_prompt" mode="replace" ref={bind}>
             <Prompt
               ref={bind}
               hint={Hint}
               workspaceID={project.workspace.current()}
-              right={<TuiPluginRuntime.Slot name="home_prompt_right" workspace_id={project.workspace.current()} />}
+              right={<TuiPluginRuntime.Slot name="home_prompt_right" />}
               placeholders={placeholder}
             />
           </TuiPluginRuntime.Slot>

@@ -1,4 +1,5 @@
 import { Effect, Layer, Schema, Context, Stream } from "effect"
+import { serviceUse } from "@/effect/service-use"
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { withTransientReadRetry } from "@/util/effect-http-client"
 import { errorMessage } from "@/util/error"
@@ -70,7 +71,11 @@ export function isLocal() {
 
 export class UpgradeFailedError extends Schema.TaggedErrorClass<UpgradeFailedError>()("UpgradeFailedError", {
   stderr: Schema.String,
-}) {}
+}) {
+  override get message() {
+    return this.stderr
+  }
+}
 
 // Response schemas for external version APIs
 const GitHubRelease = Schema.Struct({ tag_name: Schema.String })
@@ -92,6 +97,8 @@ export interface Interface {
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Installation") {}
+
+export const use = serviceUse(Service)
 
 export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProcess.Service> = Layer.effect(
   Service,
@@ -140,25 +147,34 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProce
       return "ocv"
     })
 
-    const upgradeCurl = Effect.fnUntraced(function* (target: string) {
-      const response = yield* httpOk.execute(
-        HttpClientRequest.get("https://raw.githubusercontent.com/leohenon/opencode-vim/ocv/install.sh"),
-      )
-      const body = yield* response.text
-      const bodyBytes = new TextEncoder().encode(body)
-      const result = yield* appProcess.run(
-        ChildProcess.make("bash", [], {
-          stdin: Stream.make(bodyBytes),
-          env: { OCV_VERSION: target, OCV_INSTALL_DIR: path.dirname(process.execPath) },
-          extendEnv: true,
-        }),
-      )
-      return {
-        code: result.exitCode,
-        stdout: result.stdout.toString("utf8"),
-        stderr: result.stderr.toString("utf8"),
-      }
-    }, Effect.orDie)
+    const upgradeFailure = (method: Method, result?: { code: number; stdout: string; stderr: string }) => {
+      if (method === "choco") return "not running from an elevated command shell"
+      if (result) return `Upgrade failed for ${method} (exit code ${result.code}).`
+      return `Upgrade failed for ${method}.`
+    }
+
+    const upgradeCurl = Effect.fnUntraced(
+      function* (target: string) {
+        const response = yield* httpOk.execute(
+          HttpClientRequest.get("https://raw.githubusercontent.com/leohenon/opencode-vim/ocv/install.sh"),
+        )
+        const body = yield* response.text
+        const bodyBytes = new TextEncoder().encode(body)
+        const result = yield* appProcess.run(
+          ChildProcess.make("bash", [], {
+            stdin: Stream.make(bodyBytes),
+            env: { OCV_VERSION: target, OCV_INSTALL_DIR: path.dirname(process.execPath) },
+            extendEnv: true,
+          }),
+        )
+        return {
+          code: result.exitCode,
+          stdout: result.stdout.toString("utf8"),
+          stderr: result.stderr.toString("utf8"),
+        }
+      },
+      Effect.mapError(() => new UpgradeFailedError({ stderr: upgradeFailure("curl") })),
+    )
 
     const result: Interface = {
       info: Effect.fn("Installation.info")(function* () {
@@ -168,6 +184,7 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProce
         }
       }),
       method: Effect.fn("Installation.method")(function* () {
+        if (process.execPath.includes(path.join(".ocv", "bin"))) return "curl" as Method
         if (process.execPath.includes(path.join(".opencode", "bin"))) return "curl" as Method
         if (process.execPath.includes(path.join(".local", "bin"))) return "curl" as Method
         const exec = process.execPath.toLowerCase()
@@ -302,11 +319,10 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProce
             upgradeResult = yield* run(["scoop", "install", `opencode@${target}`])
             break
           default:
-            return yield* new UpgradeFailedError({ stderr: `Unknown method: ${m}` })
+            return yield* new UpgradeFailedError({ stderr: `Unknown installation method: ${m}` })
         }
         if (!upgradeResult || upgradeResult.code !== 0) {
-          const stderr = m === "choco" ? "not running from an elevated command shell" : upgradeResult?.stderr || ""
-          return yield* new UpgradeFailedError({ stderr })
+          return yield* new UpgradeFailedError({ stderr: upgradeFailure(m, upgradeResult) })
         }
         log.info("upgraded", {
           method: m,

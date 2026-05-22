@@ -42,7 +42,7 @@ brew upgrade ocv
 
 ### Vim motions
 
-Toggle via command palette (`Ctrl+p` -> `Toggle vim mode`).
+Toggle via command palette > `Toggle vim mode`.
 
 > Unicode word boundaries are not supported.
 
@@ -104,15 +104,13 @@ Text selection from the chat session view.
 
 Hides extra UI hints and tips.
 
-Toggle via command palette (`Ctrl+p` -> `Toggle minimal ui`).
+Toggle via command palette > `Toggle minimal ui`.
 
 ## Configuration
 
 ### Prompt input height
 
-Prompt input max height is configurable with `prompt_max_height` in `tui.json`.
-
-A scrollbar appears when the prompt exceeds the visible area. `gg` / `G` focus the prompt input when typing.
+Configure prompt input height in `tui.json`:
 
 ```json
 {
@@ -121,11 +119,13 @@ A scrollbar appears when the prompt exceeds the visible area. `gg` / `G` focus t
 }
 ```
 
-> Setting `prompt_max_height` above `40` is not recommended.
+> `prompt_max_height` above `40` is not recommended.
 
 ### Submit behavior
 
-By default, vim insert mode keeps `Enter` for newlines and normal mode uses `Enter` to submit. If you want `Enter` to submit from insert mode too, add this to `tui.json`:
+By default, insert mode uses `Enter` for newlines and normal mode uses `Enter` to submit.
+
+To submit from insert mode too:
 
 ```json
 {
@@ -133,7 +133,7 @@ By default, vim insert mode keeps `Enter` for newlines and normal mode uses `Ent
 }
 ```
 
-When `vim_enter_submit` is enabled, line returns are still available through `input_newline`.
+To keep newline available:
 
 ```json
 {
@@ -143,7 +143,7 @@ When `vim_enter_submit` is enabled, line returns are still available through `in
 }
 ```
 
-If you keep `vim_enter_submit` disabled but want a separate submit key that works from insert mode, configure `input_force_submit`:
+Or configure a separate submit key:
 
 ```json
 {
@@ -153,11 +153,11 @@ If you keep `vim_enter_submit` disabled but want a separate submit key that work
 }
 ```
 
-By default, `input_force_submit` is unbound.
+`input_force_submit` is unbound by default.
 
 ### System clipboard register
 
-By default, vim mode uses an internal register for `y` and `p`. If you want yank and paste to use the system clipboard instead, add this to `tui.json`:
+Use the system clipboard as Vim's register:
 
 ```json
 {
@@ -165,7 +165,7 @@ By default, vim mode uses an internal register for `y` and `p`. If you want yank
 }
 ```
 
-With this enabled, yank operations sync to the system clipboard and `p` / `P` paste from it.
+Yank and delete operations sync to the system clipboard, `p` / `P` paste from it.
 
 > [!NOTE]
 > Terminal/OS clipboard shortcuts don’t preserve Vim linewise register state. External clipboard text is pasted as characterwise text.
@@ -188,10 +188,6 @@ vim.g.opencode_opts = {
   },
 }
 ```
-
-## Feedback
-
-Have a suggestion? [Open an issue](https://github.com/leohenon/opencode-vim/issues).
 
 ## Contributors
 

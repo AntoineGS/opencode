@@ -72,6 +72,7 @@ const pkg = {
     type: "git",
     url: "https://github.com/leohenon/opencode-vim",
   },
+  homepage: "https://leohenon.github.io/opencode-vim/",
   bugs: {
     url: "https://github.com/leohenon/opencode-vim/issues",
   },

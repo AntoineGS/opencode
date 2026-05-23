@@ -590,14 +590,15 @@ export function Prompt(props: PromptProps) {
       })
   }
 
-  function setVimRegister(register: VimRegister, notify = false) {
+  async function setVimRegister(register: VimRegister, notify = false) {
     if (!useSystemClipboardRegister()) {
       vimState.setRegister(register)
       return
     }
     clipboardRegister = register
     if (!register) return
-    Clipboard.copy(register.text)
+
+    await Clipboard.copy(register.text)
       .then(() => {
         if (notify) toast.show({ message: "Copied to clipboard", variant: "info" })
       })
@@ -606,8 +607,9 @@ export function Prompt(props: PromptProps) {
 
   async function syncVimRegisterFromClipboard() {
     if (!useSystemClipboardRegister()) return
-    const content = await Clipboard.read()
-    if (content?.mime !== "text/plain" || !content.data) {
+    const content = await Clipboard.read().catch(() => undefined)
+    if (!content) return
+    if (content.mime !== "text/plain" || !content.data) {
       clipboardRegister = null
       return
     }

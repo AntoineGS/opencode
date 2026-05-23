@@ -104,15 +104,35 @@ export async function read(): Promise<Content | undefined> {
   }
 
   if (os === "linux") {
-    const wayland = await Process.run(["wl-paste", "-t", "image/png"], { nothrow: true })
-    if (wayland.stdout.byteLength > 0) {
-      return { data: Buffer.from(wayland.stdout).toString("base64"), mime: "image/png" }
+    const which = await getWhich()
+    const hasWlPaste = !!process.env["WAYLAND_DISPLAY"] && which("wl-paste")
+
+    if (hasWlPaste) {
+      const wayland = await Process.run(["wl-paste", "-t", "image/png"], { nothrow: true })
+      if (wayland.stdout.byteLength > 0) {
+        return { data: Buffer.from(wayland.stdout).toString("base64"), mime: "image/png" }
+      }
     }
-    const x11 = await Process.run(["xclip", "-selection", "clipboard", "-t", "image/png", "-o"], {
-      nothrow: true,
-    })
-    if (x11.stdout.byteLength > 0) {
-      return { data: Buffer.from(x11.stdout).toString("base64"), mime: "image/png" }
+
+    if (!hasWlPaste) {
+      const x11 = await Process.run(["xclip", "-selection", "clipboard", "-t", "image/png", "-o"], {
+        nothrow: true,
+      })
+      if (x11.stdout.byteLength > 0) {
+        return { data: Buffer.from(x11.stdout).toString("base64"), mime: "image/png" }
+      }
+    }
+
+    // Read text via native tools before falling back to clipboardy
+    if (hasWlPaste) {
+      const text = await Process.text(["wl-paste", "--no-newline"], { nothrow: true })
+      if (text.text) return { data: text.text, mime: "text/plain" }
+    } else if (which("xclip")) {
+      const text = await Process.text(["xclip", "-selection", "clipboard", "-o"], { nothrow: true })
+      if (text.text) return { data: text.text, mime: "text/plain" }
+    } else if (which("xsel")) {
+      const text = await Process.text(["xsel", "--clipboard", "--output"], { nothrow: true })
+      if (text.text) return { data: text.text, mime: "text/plain" }
     }
   }
 

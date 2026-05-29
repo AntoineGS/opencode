@@ -250,7 +250,7 @@ export function Prompt(props: PromptProps) {
   const editorContextLabelState = createMemo(() => editor.labelState())
   const [editorContextHover, setEditorContextHover] = createSignal(false)
   const [auto, setAuto] = createSignal<AutocompleteRef>()
-  const maxHeight = createMemo(() => cfg?.prompt_max_height ?? 6)
+  const maxHeight = createMemo(() => cfg?.prompt?.max_height ?? cfg?.prompt_max_height ?? Math.max(6, Math.floor(dimensions().height / 3)))
   const showScrollbar = createMemo(() => cfg?.prompt_scrollbar !== false)
   const activeOrgName = createMemo(() => sync.data.console_state.activeOrgName)
   const canSwitchOrgs = createMemo(() => sync.data.console_state.switchableOrgCount > 1)
@@ -986,7 +986,10 @@ export function Prompt(props: PromptProps) {
           const content = await Editor.open({
             value,
             renderer,
-            cwd: project.instance.path().worktree || project.instance.directory() || process.cwd(),
+            cwd:
+              (project.instance.path().worktree === "/" ? undefined : project.instance.path().worktree) ||
+              project.instance.directory() ||
+              process.cwd(),
           })
           if (!content) return
 
@@ -2149,7 +2152,6 @@ export function Prompt(props: PromptProps) {
       }),
     }
   })
-
   function isInsertIndicator(indicator: string) {
     return indicator === "-- INSERT --"
   }
@@ -2183,8 +2185,9 @@ export function Prompt(props: PromptProps) {
 
   return (
     <>
-      <box ref={(r: BoxRenderable) => (anchor = r)} visible={props.visible !== false}>
+      <box ref={(r: BoxRenderable) => (anchor = r)} visible={props.visible !== false} width="100%">
         <box
+          width="100%"
           border={["left"]}
           borderColor={borderHighlight()}
           customBorderChars={{
@@ -2199,14 +2202,16 @@ export function Prompt(props: PromptProps) {
             flexShrink={0}
             backgroundColor={theme.backgroundElement}
             flexGrow={1}
+            width="100%"
           >
             <box flexDirection="row" flexGrow={1}>
               <textarea
                 flexGrow={1}
+                width="100%"
                 placeholder={placeholderText()}
                 placeholderColor={theme.textMuted}
-              textColor={dimmed() ? theme.textMuted : theme.text}
-              focusedTextColor={dimmed() ? theme.textMuted : theme.text}
+                textColor={dimmed() ? theme.textMuted : theme.text}
+                focusedTextColor={dimmed() ? theme.textMuted : theme.text}
               minHeight={1}
               maxHeight={maxHeight()}
               onContentChange={() => {

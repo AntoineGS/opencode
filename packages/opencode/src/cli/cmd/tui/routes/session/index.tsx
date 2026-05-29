@@ -54,6 +54,7 @@ import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import { useSDK } from "@tui/context/sdk"
 import { useEditorContext } from "@tui/context/editor"
 import { useDialog } from "../../ui/dialog"
+import { DialogAlert } from "../../ui/dialog-alert"
 import { TodoItem } from "../../component/todo-item"
 import { DialogMessage } from "./dialog-message"
 import type { PromptInfo } from "../../component/prompt/history"
@@ -135,12 +136,6 @@ const sessionBindingCommands = [
   "session.toggle.actions",
   "session.toggle.scrollbar",
   "session.toggle.generic_tool_output",
-  "session.page.up",
-  "session.page.down",
-  "session.line.up",
-  "session.line.down",
-  "session.half.page.up",
-  "session.half.page.down",
   "session.first",
   "session.last",
   "session.messages_last_user",
@@ -154,6 +149,17 @@ const sessionBindingCommands = [
   "session.child.next",
   "session.child.previous",
 ] as const
+
+const sessionGlobalBindingCommands = [
+  "session.page.up",
+  "session.page.down",
+  "session.line.up",
+  "session.line.down",
+  "session.half.page.up",
+  "session.half.page.down",
+] as const
+
+const sessionGlobalUnfocusedBindingCommands = ["session.first", "session.last"] as const
 
 const context = createContext<{
   width: number
@@ -431,15 +437,19 @@ export function Session() {
 
   const local = useLocal()
 
+  function enterChild(sessionID: string) {
+    navigate({
+      type: "session",
+      sessionID,
+    })
+    const status = sync.data.session_status[sessionID]
+    if (status?.type === "retry") void DialogAlert.show(dialog, "Retry Error", status.message)
+  }
+
   function moveFirstChild() {
     if (children().length === 1) return
     const next = children().find((x) => !!x.parentID)
-    if (next) {
-      navigate({
-        type: "session",
-        sessionID: next.id,
-      })
-    }
+    if (next) enterChild(next.id)
   }
 
   function moveChild(direction: number) {
@@ -450,12 +460,7 @@ export function Session() {
 
     if (next >= sessions.length) next = 0
     if (next < 0) next = sessions.length - 1
-    if (sessions[next]) {
-      navigate({
-        type: "session",
-        sessionID: sessions[next].id,
-      })
-    }
+    if (sessions[next]) enterChild(sessions[next].id)
   }
 
   function childSessionHandler(func: () => void) {
@@ -1000,7 +1005,10 @@ export function Session() {
             await Editor.open({
               value: transcript,
               renderer,
-              cwd: project.instance.path().worktree || project.instance.directory() || process.cwd(),
+              cwd:
+                (project.instance.path().worktree === "/" ? undefined : project.instance.path().worktree) ||
+                project.instance.directory() ||
+                process.cwd(),
             })
           } else {
             const exportDir = process.cwd()
@@ -1013,7 +1021,10 @@ export function Session() {
             const result = await Editor.open({
               value: transcript,
               renderer,
-              cwd: project.instance.path().worktree || project.instance.directory() || process.cwd(),
+              cwd:
+                (project.instance.path().worktree === "/" ? undefined : project.instance.path().worktree) ||
+                project.instance.directory() ||
+                process.cwd(),
             })
             if (result !== undefined) {
               await Filesystem.write(filepath, result)
@@ -1033,8 +1044,8 @@ export function Session() {
       category: "Session",
       hidden: true,
       run: () => {
-        moveFirstChild()
         dialog.clear()
+        moveFirstChild()
       },
     },
     {
@@ -1061,8 +1072,8 @@ export function Session() {
       hidden: true,
       enabled: !!session()?.parentID,
       run: childSessionHandler(() => {
-        moveChild(1)
         dialog.clear()
+        moveChild(1)
       }),
     },
     {
@@ -1072,8 +1083,8 @@ export function Session() {
       hidden: true,
       enabled: !!session()?.parentID,
       run: childSessionHandler(() => {
-        moveChild(-1)
         dialog.clear()
+        moveChild(-1)
       }),
     },
   ])
@@ -1091,6 +1102,15 @@ export function Session() {
 
   useBindings(() => ({
     commands: sessionCommands(),
+  }))
+
+  useBindings(() => ({
+    bindings: tuiConfig.keybinds.gather("session.global", sessionGlobalBindingCommands),
+  }))
+
+  useBindings(() => ({
+    enabled: () => renderer.currentFocusedEditor === null,
+    bindings: tuiConfig.keybinds.gather("session.global.unfocused", sessionGlobalUnfocusedBindingCommands),
   }))
 
   useBindings(() => ({
@@ -1650,24 +1670,33 @@ function ReasoningHeader(props: {
       : theme.warning
 
   return (
-    <text fg={fg()} wrapMode="none">
-      <Show when={props.toggleable}>
-        <span>{props.open ? "- " : "+ "}</span>
-      </Show>
-      <span>{props.done ? "Thought" : "Thinking"}</span>
-      <Show when={props.title || props.duration}>
-        <span>: </span>
-      </Show>
-      <Show when={props.title}>
-        <span>{props.title}</span>
-      </Show>
-      <Show when={props.duration}>
-        <span>
-          {props.title ? " · " : ""}
-          {props.duration}
-        </span>
-      </Show>
-    </text>
+    <Switch>
+      <Match when={!props.done}>
+        <box flexDirection="row">
+          <Spinner color={fg()}>{props.title ? "Thinking: " + props.title : "Thinking"}</Spinner>
+        </box>
+      </Match>
+      <Match when={true}>
+        <text fg={fg()} wrapMode="none">
+          <Show when={props.toggleable}>
+            <span>{props.open ? "- " : "+ "}</span>
+          </Show>
+          <span>Thought</span>
+          <Show when={props.title || props.duration}>
+            <span>: </span>
+          </Show>
+          <Show when={props.title}>
+            <span>{props.title}</span>
+          </Show>
+          <Show when={props.duration}>
+            <span>
+              {props.title ? " · " : ""}
+              {props.duration}
+            </span>
+          </Show>
+        </text>
+      </Match>
+    </Switch>
   )
 }
 
@@ -1854,6 +1883,7 @@ function GenericTool(props: ToolProps<any>) {
 function InlineTool(props: {
   icon: string
   iconColor?: RGBA
+  color?: RGBA
   complete: any
   pending: string
   spinner?: boolean
@@ -1875,6 +1905,7 @@ function InlineTool(props: {
   })
 
   const fg = createMemo(() => {
+    if (props.color) return props.color
     if (permission()) return theme.warning
     if (hover() && props.onClick) return theme.text
     if (props.complete) return theme.textMuted
@@ -2160,8 +2191,10 @@ function WebSearch(props: ToolProps<typeof WebSearchTool>) {
 }
 
 function Task(props: ToolProps<typeof TaskTool>) {
+  const { theme } = useTheme()
   const { navigate } = useRoute()
   const sync = useSync()
+  const dialog = useDialog()
 
   onMount(() => {
     if (props.metadata.sessionId && !sync.data.message[props.metadata.sessionId]?.length)
@@ -2183,6 +2216,11 @@ function Task(props: ToolProps<typeof TaskTool>) {
   )
 
   const isRunning = createMemo(() => props.part.state.status === "running")
+  const retry = createMemo(() => {
+    const status = sync.data.session_status[props.metadata.sessionId ?? ""]
+    if (status?.type !== "retry") return
+    return status
+  })
 
   const duration = createMemo(() => {
     const first = messages().find((x) => x.role === "user")?.time.created
@@ -2197,7 +2235,10 @@ function Task(props: ToolProps<typeof TaskTool>) {
       props.metadata.background === true ? `${props.input.description} (background)` : props.input.description
     let content = [`${Locale.titlecase(props.input.subagent_type ?? "General")} Task — ${description}`]
 
-    if (isRunning() && tools().length > 0) {
+    const retrying = retry()
+    if (isRunning() && retrying) {
+      content.push(`↳ ${Locale.truncate(retrying.message, 80)} [retrying attempt #${retrying.attempt}]`)
+    } else if (isRunning() && tools().length > 0) {
       // content[0] += ` · ${tools().length} toolcalls`
       if (current()) {
         const state = current()!.state
@@ -2220,6 +2261,7 @@ function Task(props: ToolProps<typeof TaskTool>) {
   return (
     <InlineTool
       icon="│"
+      color={retry() ? theme.error : undefined}
       spinner={isRunning()}
       complete={props.input.description}
       pending="Delegating..."
@@ -2228,6 +2270,8 @@ function Task(props: ToolProps<typeof TaskTool>) {
         if (props.metadata.sessionId) {
           navigate({ type: "session", sessionID: props.metadata.sessionId })
         }
+        const status = retry()
+        if (status) void DialogAlert.show(dialog, "Retry Error", status.message)
       }}
     >
       {content()}

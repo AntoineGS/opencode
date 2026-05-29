@@ -78,6 +78,7 @@ export function DialogModel(props: { providerID?: string }) {
           map(([model, info]) => ({
             value: { providerID: provider.id, modelID: model },
             title: info.name ?? model,
+            releaseDate: info.release_date,
             description: favorites.some((item) => item.providerID === provider.id && item.modelID === model)
               ? "(Favorite)"
               : undefined,
@@ -98,10 +99,7 @@ export function DialogModel(props: { providerID?: string }) {
               return false
             return true
           }),
-          sortBy(
-            (x) => x.footer !== "Free",
-            (x) => x.title,
-          ),
+          (options) => sortModelOptions(options, props.providerID !== undefined),
         ),
       ),
     )
@@ -178,5 +176,17 @@ export function DialogModel(props: { providerID?: string }) {
       title={title()}
       current={local.model.current()}
     />
+  )
+}
+
+export function sortModelOptions<T extends { footer?: string; releaseDate: string; title: string }>(
+  options: T[],
+  newestFirst: boolean,
+) {
+  if (newestFirst) return sortBy(options, [(option) => option.releaseDate, "desc"], (option) => option.title)
+  return sortBy(
+    options,
+    (option) => option.footer !== "Free",
+    (option) => option.title,
   )
 }

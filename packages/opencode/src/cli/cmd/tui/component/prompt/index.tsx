@@ -119,6 +119,7 @@ export type PromptProps = {
     setCol: (offset: number) => void
     setStick: (stick: "start" | "first" | "end") => void
     scroll: (action: "center" | "top" | "bottom") => void
+    copyToggleVisualEnd: () => void
     active: () => boolean
   }
 }
@@ -727,6 +728,10 @@ export function Prompt(props: PromptProps) {
       const reg = props.copy?.yankMatchingBracket()
       if (!reg) return false
       setVimRegister(reg, true)
+      return true
+    },
+    copyToggleVisualEnd() {
+      props.copy?.copyToggleVisualEnd()
       return true
     },
     copyCopy() {

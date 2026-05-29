@@ -1086,6 +1086,22 @@ export function syncSelection(textarea: TextareaRenderable, anchor: number, line
   textarea.editorView.setSelection(lo, hi, textarea.selectionBg, textarea.selectionFg)
 }
 
+export function toggleVisualEnd(textarea: TextareaRenderable, anchor: number, linewise = false) {
+  const text = textarea.plainText
+  const cursor = textarea.cursorOffset
+
+  let lo = Math.min(anchor, cursor)
+  let hi = Math.max(anchor + 1, cursor + 1)
+
+  if (linewise) {
+    lo = lineStart(text, lo)
+    hi = lineEnd(text, hi - 1)
+    if (hi < text.length) hi++
+  }
+
+  textarea.editorView.setSelection(lo, hi, textarea.selectionBg, textarea.selectionFg)
+}
+
 export function clearSelection(textarea: TextareaRenderable) {
   const ta = textarea as any
   ta.updateSelectionForMovement(false, true)

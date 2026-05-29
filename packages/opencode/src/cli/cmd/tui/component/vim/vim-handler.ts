@@ -58,6 +58,7 @@ import {
   substituteLine,
   substituteLineEnd,
   syncSelection,
+  toggleVisualEnd,
   toggleCase,
   toggleSelectionCase,
   wordEnd,
@@ -128,6 +129,7 @@ export function createVimHandler(input: {
   copyYank?: () => void
   copyYankLine?: () => void
   copyYankMatchingBracket?: () => boolean
+  copyToggleVisualEnd?: () => void
   copyCopy?: () => void
   copyIsVisual?: () => boolean
   copyJump?: (action: VimJump) => void
@@ -663,7 +665,20 @@ export function createVimHandler(input: {
         return true
       }
 
-      if ((key === "i" || key === "a" || key === "o") && !event.shift && !hasModifier(event)) {
+      if ((key === "i" || key === "a") && !event.shift && !hasModifier(event)) {
+        event.preventDefault()
+        return true
+      }
+
+      if (key === "o" && !event.shift && !hasModifier(event)) {
+        const cursor = input.textarea().cursorOffset
+        const anchor = input.state.anchor()
+
+        if (anchor !== null) {
+            input.textarea().cursorOffset = anchor
+            input.state.setAnchor(cursor)
+          toggleVisualEnd(input.textarea(), cursor, input.state.isVisualLine())
+        }
         event.preventDefault()
         return true
       }
@@ -1430,6 +1445,12 @@ export function createVimHandler(input: {
     if (key === "v" && !event.shift) {
       clearCopyPending()
       input.copyVisual?.("char")
+      event.preventDefault()
+      return true
+    }
+
+    if (key === "o" && !hasModifier(event) && input.copyIsVisual?.() && !isShifted(event, "o")) {
+      input.copyToggleVisualEnd?.()
       event.preventDefault()
       return true
     }

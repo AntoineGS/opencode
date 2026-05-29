@@ -642,6 +642,18 @@ export function createCopyMode(input: {
     setState((prev) => ({ ...prev, col: c, stick: c - min }))
   }
 
+  function copyToggleVisualEnd() {
+    const anchor = state().anchor
+    if (!anchor) return
+    setState((prev) => ({
+      ...prev,
+      idx: anchor.idx,
+      col: anchor.col,
+      stick: anchor.col - copyMin(rows()[anchor.idx]),
+      anchor: { idx: prev.idx, col: prev.col},
+    }))
+  }
+
   function wordRows(list: CopyRow[], cache: Map<string, any>) {
     return list.map((row) => ({ col: copyMin(row, cache) }))
   }
@@ -1063,6 +1075,7 @@ export function createCopyMode(input: {
       setCol,
       setStick,
       scroll,
+      copyToggleVisualEnd,
       active: () => state().active,
     },
     row,

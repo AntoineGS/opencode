@@ -1369,6 +1369,82 @@ describe("vim motion handler", () => {
     expect(ctx.state.register()?.linewise).toBe(true)
   })
 
+  test("o toggles cursor to other end of selection in visual mode", () => {
+    const ctx = createHandler("line one\nline two\nline three\nline four")
+    ctx.textarea.cursorOffset = 0
+    ctx.handler.handleKey(createEvent("v").event)
+    ctx.handler.handleKey(createEvent("j").event)
+    ctx.handler.handleKey(createEvent("j").event)
+    expect(ctx.textarea.cursorOffset).toBe(rowColToOffset(ctx.textarea.plainText, 2, 0))
+    expect(ctx.state.anchor()).toBe(0)
+    expect((ctx.textarea as any).editorView.getSelection()).toEqual({ start: 0, end: rowColToOffset(ctx.textarea.plainText, 2, 0) + 1 })
+
+    ctx.handler.handleKey(createEvent("o").event)
+    expect(ctx.textarea.cursorOffset).toBe(0)
+    expect(ctx.state.anchor()).toBe(rowColToOffset(ctx.textarea.plainText, 2, 0))
+    expect((ctx.textarea as any).editorView.getSelection()).toEqual({ start: 0, end: rowColToOffset(ctx.textarea.plainText, 2, 0) + 1 })
+  })
+
+  test("o toggles cursor when cursor is above anchor", () => {
+    const ctx = createHandler("line one\nline two\nline three\nline four")
+    const bottom = rowColToOffset(ctx.textarea.plainText, 2, 0)
+    ctx.textarea.cursorOffset = bottom
+    ctx.handler.handleKey(createEvent("v").event)
+    ctx.handler.handleKey(createEvent("k").event)
+    ctx.handler.handleKey(createEvent("k").event)
+    expect(ctx.textarea.cursorOffset).toBe(0)
+    expect(ctx.state.anchor()).toBe(bottom)
+
+    ctx.handler.handleKey(createEvent("o").event)
+    expect(ctx.textarea.cursorOffset).toBe(bottom)
+    expect(ctx.state.anchor()).toBe(0)
+  })
+
+  test("o in visual-line mode toggles to other end", () => {
+    const ctx = createHandler("line one\nline two\nline three\nline four")
+    ctx.textarea.cursorOffset = 0
+    ctx.handler.handleKey(createEvent("V").event)
+    ctx.handler.handleKey(createEvent("j").event)
+    ctx.handler.handleKey(createEvent("j").event)
+    expect(ctx.textarea.cursorOffset).toBe(rowColToOffset(ctx.textarea.plainText, 2, 0))
+    expect(ctx.state.anchor()).toBe(0)
+
+    ctx.handler.handleKey(createEvent("o").event)
+    expect(ctx.textarea.cursorOffset).toBe(0)
+    expect(ctx.state.anchor()).toBe(rowColToOffset(ctx.textarea.plainText, 2, 0))
+  })
+
+  test("o is a no-op when cursor equals anchor", () => {
+    const ctx = createHandler("line one\nline two")
+    ctx.textarea.cursorOffset = 5
+    ctx.handler.handleKey(createEvent("v").event)
+    expect(ctx.textarea.cursorOffset).toBe(5)
+    expect(ctx.state.anchor()).toBe(5)
+
+    ctx.handler.handleKey(createEvent("o").event)
+    expect(ctx.textarea.cursorOffset).toBe(5)
+    expect(ctx.state.anchor()).toBe(5)
+  })
+
+  test("after o toggle, movement extends from new cursor position", () => {
+    const ctx = createHandler("line one\nline two\nline three\nline four")
+    ctx.textarea.cursorOffset = 0
+    ctx.handler.handleKey(createEvent("v").event)
+    ctx.handler.handleKey(createEvent("j").event)
+    ctx.handler.handleKey(createEvent("j").event)
+    ctx.handler.handleKey(createEvent("o").event)
+    expect(ctx.textarea.cursorOffset).toBe(0)
+    expect(ctx.state.anchor()).toBe(rowColToOffset(ctx.textarea.plainText, 2, 0))
+
+    ctx.handler.handleKey(createEvent("j").event)
+    expect(ctx.textarea.cursorOffset).toBe(rowColToOffset(ctx.textarea.plainText, 1, 0))
+    expect(ctx.state.anchor()).toBe(rowColToOffset(ctx.textarea.plainText, 2, 0))
+    expect((ctx.textarea as any).editorView.getSelection()).toEqual({
+      start: rowColToOffset(ctx.textarea.plainText, 1, 0),
+      end: rowColToOffset(ctx.textarea.plainText, 2, 0) + 1,
+    })
+  })
+
   test("supports insert transitions for A I O", () => {
     const i0 = createHandler("abc")
     i0.textarea.cursorOffset = 1
@@ -8308,6 +8384,112 @@ describe("copy mode", () => {
     expect(ctx.handler.handleKey(x.event)).toBe(true)
     expect(ctx.state.pending()).toBe("")
     expect(ctx.state.mode()).toBe("copy")
+  })
+
+  test("copyToggleVisualEnd swaps anchor and cursor in copy mode", () => {
+    const min = 7  // row.col (3) + gutter (4)
+    createRoot((dispose) => {
+      const cm = createRenderedCopyMode(["alpha", "beta", "gamma"])
+      cm.prompt.visual("char")
+      cm.prompt.move("down")
+      cm.prompt.move("right")
+      cm.prompt.move("right")
+
+      const before = cm.state()
+      expect(before.visual).toBe("char")
+      expect(before.anchor).toEqual({ idx: 0, col: min })
+      expect(before.idx).toBe(1)
+      expect(before.col).toBe(min + 2)
+
+      cm.prompt.copyToggleVisualEnd()
+
+      const after = cm.state()
+      expect(after.visual).toBe("char")
+      expect(after.active).toBe(true)
+      expect(after.anchor).toEqual({ idx: 1, col: min + 2 })
+      expect(after.idx).toBe(0)
+      expect(after.col).toBe(min)
+
+      dispose()
+    })
+  })
+
+  test("copyToggleVisualEnd preserves visual line mode", () => {
+    const min = 7
+    createRoot((dispose) => {
+      const cm = createRenderedCopyMode(["alpha", "beta", "gamma"])
+      cm.prompt.visual("line")
+      cm.prompt.move("down")
+      cm.prompt.move("down")
+
+      const before = cm.state()
+      expect(before.visual).toBe("line")
+      expect(before.anchor).toEqual({ idx: 0, col: min })
+      expect(before.idx).toBe(2)
+
+      cm.prompt.copyToggleVisualEnd()
+
+      const after = cm.state()
+      expect(after.visual).toBe("line")
+      expect(after.active).toBe(true)
+      expect(after.anchor).toEqual({ idx: 2, col: min })
+      expect(after.idx).toBe(0)
+      expect(after.col).toBe(min)
+
+      dispose()
+    })
+  })
+
+  test("copyToggleVisualEnd does nothing when no anchor", () => {
+    createRoot((dispose) => {
+      const cm = createRenderedCopyMode(["alpha", "beta"])
+      cm.prompt.jump("top")
+
+      const before = cm.state()
+      expect(before.anchor).toBeUndefined()
+      expect(before.idx).toBe(0)
+
+      cm.prompt.copyToggleVisualEnd()
+
+      const after = cm.state()
+      expect(after.idx).toBe(0)
+      expect(after.anchor).toBeUndefined()
+      expect(after.active).toBe(true)
+
+      dispose()
+    })
+  })
+
+  test("copyToggleVisualEnd updates stick so vertical movement uses new cursor column", () => {
+    const min = 7  // row.col (3) + gutter (4)
+    createRoot((dispose) => {
+      const cm = createRenderedCopyMode(["alpha", "beta", "gamma"])
+      cm.prompt.visual("char")
+      cm.prompt.move("down")
+      cm.prompt.move("right")
+
+      const before = cm.state()
+      expect(before.idx).toBe(1)
+      expect(before.col).toBe(min + 1)
+      expect(before.stick).toBe(1)
+
+      cm.prompt.copyToggleVisualEnd()
+
+      const afterToggle = cm.state()
+      expect(afterToggle.idx).toBe(0)
+      expect(afterToggle.col).toBe(min)
+      expect(afterToggle.stick).toBe(0)
+
+      cm.prompt.move("down")
+
+      const afterMove = cm.state()
+      expect(afterMove.idx).toBe(1)
+      // should use updated stick (0) not old stick (1),
+      // so column should be min (7) not min + 1 (8)
+      expect(afterMove.col).toBe(min)
+
+      dispose()
+    })
   })
 })
 

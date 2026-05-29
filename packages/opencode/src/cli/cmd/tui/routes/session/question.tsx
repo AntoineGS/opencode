@@ -31,6 +31,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
   })
 
   let textarea: TextareaRenderable | undefined
+  const [clearedText, setClearedText] = createSignal<{ tab: number; text: string } | undefined>()
 
   const question = createMemo(() => questions()[store.tab])
   const confirm = createMemo(() => !single() && store.tab === questions().length)
@@ -151,6 +152,10 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
         desc: "Cancel answer edit",
         group: "Question",
         cmd: () => {
+          const text = textarea?.plainText ?? ""
+          if (text) {
+            setClearedText({ tab: store.tab, text })
+          }
           setStore("editing", false)
         },
       },
@@ -275,6 +280,21 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
               { key: "down", desc: "Next answer", group: "Question", cmd: () => moveTo((store.selected + 1) % total) },
               { key: "j", desc: "Next answer", group: "Question", cmd: () => moveTo((store.selected + 1) % total) },
               { key: "return", desc: "Select answer", group: "Question", cmd: () => selectOption() },
+              {
+                key: "u",
+                desc: "Undo cleared text",
+                group: "Question",
+                hidden: !clearedText() || clearedText()!.tab !== store.tab,
+                cmd: () => {
+                  const stash = clearedText()
+                  if (!stash || stash.tab !== store.tab) return
+                  const inputs = [...store.custom]
+                  inputs[stash.tab] = stash.text
+                  setStore("custom", inputs)
+                  setClearedText()
+                  setStore("editing", true)
+                },
+              },
               { key: "escape", desc: "Reject question", group: "Question", cmd: () => reject() },
               ...tuiConfig.keybinds.get("app.exit"),
             ]),

@@ -18,9 +18,12 @@ import {
   findCharInLine,
   findCharTargetInLine,
   firstNonWhitespace,
+  firstNonWhitespaceOperation,
   getLineColumn,
   insertLineStart,
   joinLines,
+  lineBeginningOperation,
+  lineEndOperation,
   matchingBracketOperation,
   matchingBracketTarget,
   moveBigWordEnd,
@@ -374,6 +377,22 @@ export function createVimHandler(input: {
     }
     if ((key === "e" || isShifted(event, "e")) && !hasModifier(event)) {
       applyOperatorResult(() => wordEndOperation(isShifted(event, "e")), operation)
+      return true
+    }
+    return false
+  }
+
+  function lineBoundaryMotion(event: VimEvent, key: string, operation: VimOperator): boolean {
+    if (key === "$" && !hasModifier(event)) {
+      applyOperatorResult(() => lineEndOperation(input.textarea()), operation)
+      return true
+    }
+    if (key === "0" && !event.shift && !hasModifier(event)) {
+      applyOperatorResult(() => lineBeginningOperation(input.textarea()), operation)
+      return true
+    }
+    if (key === "^" && !hasModifier(event)) {
+      applyOperatorResult(() => firstNonWhitespaceOperation(input.textarea()), operation)
       return true
     }
     return false
@@ -803,6 +822,11 @@ export function createVimHandler(input: {
         return true
       }
 
+      if (lineBoundaryMotion(event, key, "c")) {
+        event.preventDefault()
+        return true
+      }
+
       if (operatorTextObject(event, key, "c")) return true
 
       if (paragraphOperator(key, "c")) {
@@ -842,6 +866,11 @@ export function createVimHandler(input: {
         return true
       }
 
+      if (lineBoundaryMotion(event, key, "d")) {
+        event.preventDefault()
+        return true
+      }
+
       if (operatorTextObject(event, key, "d")) return true
 
       if (paragraphOperator(key, "d")) {
@@ -877,6 +906,11 @@ export function createVimHandler(input: {
       }
 
       if (wordOperator(event, key, "y")) {
+        event.preventDefault()
+        return true
+      }
+
+      if (lineBoundaryMotion(event, key, "y")) {
         event.preventDefault()
         return true
       }

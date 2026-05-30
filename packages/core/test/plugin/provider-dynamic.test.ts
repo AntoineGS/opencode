@@ -21,6 +21,7 @@ function npmEntrypointLayer(entrypoint: Option.Option<string>) {
     Npm.Service.of({
       add: () => Effect.succeed({ directory: "", entrypoint }),
       install: () => Effect.void,
+      outdated: () => Effect.succeed(false),
       which: () => Effect.succeed(Option.none<string>()),
     }),
   )

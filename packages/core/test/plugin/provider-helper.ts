@@ -18,6 +18,7 @@ export const npmLayer = Layer.succeed(
   Npm.Service.of({
     add: () => Effect.succeed({ directory: "", entrypoint: Option.none<string>() }),
     install: () => Effect.void,
+    outdated: () => Effect.succeed(false),
     which: () => Effect.succeed(Option.none<string>()),
   }),
 )

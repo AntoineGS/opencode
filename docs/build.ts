@@ -11,13 +11,16 @@ const html = `<!DOCTYPE html>
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>OpenCode Vim — Vim motions in OpenCode</title>
-  <meta name="description" content="OpenCode Vim is an unofficial fork of OpenCode with Vim mode, navigation, and editing." />
+  <title>OpenCode Vim — Vim mode for OpenCode</title>
+  <meta name="description" content="OpenCode Vim adds built-in Vim mode, motions, navigation, and editing to OpenCode. Install ocv with curl, npm, or Homebrew." />
   <meta name="robots" content="index, follow" />
+  <meta name="google-site-verification" content="UjHhjkxtdlxI3GCTbzUTqHcEL2e9HReKMMLegR3W7co" />
   <link rel="canonical" href="https://leohenon.github.io/opencode-vim/" />
+  <link rel="sitemap" type="application/xml" href="https://leohenon.github.io/opencode-vim/sitemap.xml" />
   <link rel="icon" type="image/png" sizes="96x96" href="./favicon.png" />
-  <meta property="og:title" content="OpenCode Vim — Vim motions in OpenCode" />
-  <meta property="og:description" content="An unofficial fork of OpenCode with Vim mode, navigation, and editing." />
+  <meta property="og:title" content="OpenCode Vim — Vim mode for OpenCode" />
+  <meta property="og:description" content="OpenCode Vim adds built-in Vim mode, motions, navigation, and editing to OpenCode." />
+  <meta property="og:site_name" content="OpenCode Vim" />
   <meta property="og:url" content="https://leohenon.github.io/opencode-vim/" />
   <meta property="og:type" content="website" />
   <meta name="twitter:card" content="summary" />
@@ -26,7 +29,11 @@ const html = `<!DOCTYPE html>
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
     "name": "OpenCode Vim",
-    "description": "An unofficial fork of OpenCode with Vim mode, navigation, and editing.",
+    "alternateName": "ocv",
+    "description": "OpenCode Vim adds built-in Vim mode, motions, navigation, and editing to OpenCode.",
+    "url": "https://leohenon.github.io/opencode-vim/",
+    "sameAs": ["https://github.com/leohenon/opencode-vim", "https://www.npmjs.com/package/@leohenon/ocv"],
+    "codeRepository": "https://github.com/leohenon/opencode-vim",
     "operatingSystem": "Linux, macOS",
     "applicationCategory": "DeveloperApplication"
   }
@@ -119,10 +126,11 @@ const html = `<!DOCTYPE html>
     .tab:hover { color: var(--text); }
     .tab[aria-pressed="true"] { color: var(--text); border-color: var(--text); }
     .command-row { display: flex; align-items: center; justify-content: flex-start; padding: 0.75rem 1.1rem; color: var(--muted); }
-    .command-inner { display: inline-flex; align-items: center; gap: 0.625rem; max-width: 100%; padding: 0.15rem 0.45rem; border-radius: 4px; }
+    .command-inner { display: inline-flex; align-items: center; gap: 0.625rem; max-width: 100%; min-width: 0; padding: 0.15rem 0.45rem; border-radius: 4px; }
     .command-inner:hover { background: #232020; }
     .prompt { color: var(--dim); user-select: none; }
-    .command-row code { white-space: nowrap; overflow-x: auto; }
+    .command-row code { display: block; min-width: 0; white-space: nowrap; overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; }
+    .command-row code::-webkit-scrollbar { width: 0; height: 0; display: none; }
     .run-row { padding: 0 1.55rem 0.9rem; color: var(--muted); }
     .run-row code { color: var(--text); }
     .copy { appearance: none; border: 0; background: transparent; color: var(--dim); cursor: pointer; padding: 0; line-height: 1; display: inline-flex; align-items: center; flex-shrink: 0; }
@@ -214,8 +222,8 @@ const html = `<!DOCTYPE html>
       <section class="hero" id="install">
         <div class="wrap">
           <p class="kicker">OpenCode Vim</p>
-          <h1>Vim motions in OpenCode</h1>
-          <p class="lede">An unofficial fork with Vim navigation and editing.</p>
+          <h1>OpenCode Vim: Vim mode for OpenCode</h1>
+          <p class="lede">OpenCode Vim is an unofficial OpenCode fork with built-in Vim motions, navigation, and editing.</p>
 
           <div class="install">
             <div class="tabs" aria-label="Install method">

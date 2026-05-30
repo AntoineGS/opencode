@@ -17,6 +17,9 @@ curl -fsSL https://raw.githubusercontent.com/leohenon/opencode-vim/ocv/install.s
 # Package managers
 npm i -g @leohenon/ocv
 brew install leohenon/tap/ocv
+
+# Arch Linux AUR (community-maintained)
+yay -S opencode-vim-bin
 ```
 
 Curl installs to `~/.ocv/bin`. Set `OCV_INSTALL_DIR` to install elsewhere.

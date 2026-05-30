@@ -111,10 +111,11 @@
     .tab:hover { color: var(--text); }
     .tab[aria-pressed="true"] { color: var(--text); border-color: var(--text); }
     .command-row { display: flex; align-items: center; justify-content: flex-start; padding: 0.75rem 1.1rem; color: var(--muted); }
-    .command-inner { display: inline-flex; align-items: center; gap: 0.625rem; max-width: 100%; padding: 0.15rem 0.45rem; border-radius: 4px; }
+    .command-inner { display: inline-flex; align-items: center; gap: 0.625rem; max-width: 100%; min-width: 0; padding: 0.15rem 0.45rem; border-radius: 4px; }
     .command-inner:hover { background: #232020; }
     .prompt { color: var(--dim); user-select: none; }
-    .command-row code { white-space: nowrap; overflow-x: auto; }
+    .command-row code { display: block; min-width: 0; white-space: nowrap; overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; }
+    .command-row code::-webkit-scrollbar { width: 0; height: 0; display: none; }
     .run-row { padding: 0 1.55rem 0.9rem; color: var(--muted); }
     .run-row code { color: var(--text); }
     .copy { appearance: none; border: 0; background: transparent; color: var(--dim); cursor: pointer; padding: 0; line-height: 1; display: inline-flex; align-items: center; flex-shrink: 0; }

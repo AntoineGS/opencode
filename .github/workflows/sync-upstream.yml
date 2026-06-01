@@ -73,7 +73,7 @@ jobs:
           next="${track%.*}.$((10#${track#*.} + 1))"
           printf '%s\n' "$next" > .github/ocv-track
           git add .github/ocv-track
-          git commit -m "release: bump ocv-track"
+          git commit -m "chore: bump ocv-track"
           echo "Bumped ocv track from $track to $next for ocv PRs merged since $previous:"
           cat "$prs"
 

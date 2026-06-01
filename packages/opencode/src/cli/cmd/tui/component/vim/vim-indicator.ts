@@ -5,7 +5,7 @@ export function useVimIndicator(input: {
   enabled: Accessor<boolean>
   active: Accessor<boolean>
   state: ReturnType<typeof createVimState>
-  copyVisual?: Accessor<undefined | "char" | "line">
+  copyVisual?: Accessor<undefined | "char" | "line" | "block">
   copySearch?: Accessor<string | undefined>
 }) {
   return createMemo(() => {
@@ -17,6 +17,7 @@ export function useVimIndicator(input: {
       if (search !== undefined) return search
       if (input.copyVisual?.() === "char") return "-- VISUAL --"
       if (input.copyVisual?.() === "line") return "-- VISUAL LINE --"
+      if (input.copyVisual?.() === "block") return "-- VISUAL BLOCK --"
       return "-- COPY --"
     }
     if (input.state.isInsert()) return "-- INSERT --"

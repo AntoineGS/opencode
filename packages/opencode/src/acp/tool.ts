@@ -46,6 +46,7 @@ export function toToolKind(toolName: string): ToolKind {
       return "fetch"
 
     case "edit":
+    case "apply_patch":
     case "patch":
     case "write":
       return "edit"
@@ -59,6 +60,9 @@ export function toToolKind(toolName: string): ToolKind {
 
     case "read":
       return "read"
+
+    case "task":
+      return "think"
 
     default:
       return "other"

@@ -15,6 +15,7 @@ describe("acp tool conversion", () => {
     expect(toToolKind("shell")).toBe("execute")
     expect(toToolKind("webfetch")).toBe("fetch")
     expect(toToolKind("edit")).toBe("edit")
+    expect(toToolKind("apply_patch")).toBe("edit")
     expect(toToolKind("patch")).toBe("edit")
     expect(toToolKind("write")).toBe("edit")
     expect(toToolKind("grep")).toBe("search")
@@ -22,6 +23,7 @@ describe("acp tool conversion", () => {
     expect(toToolKind("context7_resolve_library_id")).toBe("search")
     expect(toToolKind("context7_get_library_docs")).toBe("search")
     expect(toToolKind("read")).toBe("read")
+    expect(toToolKind("task")).toBe("think")
     expect(toToolKind("custom_tool")).toBe("other")
   })
 

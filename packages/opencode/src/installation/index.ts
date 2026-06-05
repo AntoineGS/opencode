@@ -153,6 +153,12 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProce
       return `Upgrade failed for ${method}.`
     }
 
+    const upgradeScriptShell = Effect.fnUntraced(function* () {
+      const bashVersion = yield* text(["bash", "--version"])
+      if (bashVersion) return "bash"
+      return "sh"
+    })
+
     const upgradeCurl = Effect.fnUntraced(
       function* (target: string) {
         const response = yield* httpOk.execute(
@@ -160,8 +166,9 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProce
         )
         const body = yield* response.text
         const bodyBytes = new TextEncoder().encode(body)
+        const shell = yield* upgradeScriptShell()
         const result = yield* appProcess.run(
-          ChildProcess.make("bash", [], {
+          ChildProcess.make(shell, [], {
             stdin: Stream.make(bodyBytes),
             env: { OCV_VERSION: target, OCV_INSTALL_DIR: path.dirname(process.execPath) },
             extendEnv: true,

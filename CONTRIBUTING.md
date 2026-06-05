@@ -1,13 +1,8 @@
 # Contributing
 
-PRs are welcome. Open an issue first for large changes, behavior changes, or new features.
+PRs welcome. Open an issue first for large changes, or new features.
 
-ocv tracks upstream OpenCode. Keep fork-specific changes focused on Vim mode/copy mode.
-
-## Pull requests
-
-- Target the `ocv` branch.
-- If your PR targets a feature listed in [#5](https://github.com/leohenon/opencode-vim/issues/5), comment there first.
+ocv tracks OpenCode. Keep fork-specific changes focused on Vim mode/copy mode.
 
 ## Development
 

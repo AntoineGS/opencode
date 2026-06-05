@@ -44,7 +44,6 @@ import type { AssistantMessage, FilePart, UserMessage } from "@opencode-ai/sdk/v
 import { TuiEvent } from "../../event"
 import { iife } from "@/util/iife"
 import { Locale } from "@/util/locale"
-import { errorMessage } from "@/util/error"
 import { formatDuration } from "@/util/format"
 import { createColors, createFrames } from "../../ui/spinner.ts"
 import { useDialog } from "@tui/ui/dialog"
@@ -54,12 +53,6 @@ import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { createFadeIn } from "../../util/signal"
 import { DialogSkill } from "../dialog-skill"
-import {
-  confirmWorkspaceFileChanges,
-  openWorkspaceSelect,
-  warpWorkspaceSession,
-  type WorkspaceSelection,
-} from "../dialog-workspace-create"
 import { DialogWorkspaceUnavailable } from "../dialog-workspace-unavailable"
 import { useArgs } from "@tui/context/args"
 import { useVimEnabled } from "../vim"
@@ -71,7 +64,6 @@ import { useVimIndicator } from "../vim/vim-indicator"
 import { emptyRows } from "./empty-selection"
 import { CONSOLE_MANAGED_ICON, consoleManagedProviderLabel } from "@tui/util/provider-origin"
 import { Flag } from "@opencode-ai/core/flag/flag"
-import { type WorkspaceStatus } from "../workspace-label"
 import {
   OPENCODE_BASE_MODE,
   useBindings,
@@ -80,6 +72,8 @@ import {
   useOpencodeKeymap,
   VIM_WINDOW_TOKEN,
 } from "../../keymap"
+import { usePromptWorkspace } from "./workspace"
+import { usePromptMove } from "./move"
 
 type CopySearchDirection = "forward" | "backward"
 
@@ -266,7 +260,9 @@ export function Prompt(props: PromptProps) {
   const editorContextLabelState = createMemo(() => editor.labelState())
   const [editorContextHover, setEditorContextHover] = createSignal(false)
   const [auto, setAuto] = createSignal<AutocompleteRef>()
-  const maxHeight = createMemo(() => cfg?.prompt?.max_height ?? cfg?.prompt_max_height ?? Math.max(6, Math.floor(dimensions().height / 3)))
+  const maxHeight = createMemo(() =>
+    cfg?.prompt?.max_height ?? cfg?.prompt_max_height ?? Math.max(6, Math.floor(dimensions().height / 3)),
+  )
   const showScrollbar = createMemo(() => cfg?.prompt_scrollbar !== false)
   const activeOrgName = createMemo(() => sync.data.console_state.activeOrgName)
   const canSwitchOrgs = createMemo(() => sync.data.console_state.switchableOrgCount > 1)
@@ -277,99 +273,9 @@ export function Prompt(props: PromptProps) {
     return consoleManagedProviderLabel(sync.data.console_state.consoleManagedProviders, current.providerID, provider)
   })
   const hasRightContent = createMemo(() => Boolean(props.right || activeOrgName()))
-  const defaultWorkspaceID = createMemo(() => props.workspaceID ?? project.workspace.current())
-  const [workspaceSelection, setWorkspaceSelection] = createSignal<WorkspaceSelection>()
-  const [workspaceCreating, setWorkspaceCreating] = createSignal(false)
-  const [workspaceCreatingDots, setWorkspaceCreatingDots] = createSignal(3)
-  const [warpNotice, setWarpNotice] = createSignal<string>()
-
+  const workspace = usePromptWorkspace(props.sessionID)
+  const move = usePromptMove({ projectID: project.project, sessionID: () => props.sessionID })
   const [cursorVersion, setCursorVersion] = createSignal(0)
-
-  function selectWorkspace(selection: WorkspaceSelection | undefined) {
-    setWorkspaceSelection(selection)
-  }
-
-  function setCreatingWorkspace(creating: boolean) {
-    setWorkspaceCreating(creating)
-  }
-
-  function showWarpNotice(name: string) {
-    setWarpNotice(`Warped to ${name}`)
-    setTimeout(() => setWarpNotice(undefined), 4000)
-  }
-
-  async function createWorkspace(selection: Extract<WorkspaceSelection, { type: "new" }>) {
-    setCreatingWorkspace(true)
-    let result
-    try {
-      result = await sdk.client.experimental.workspace.create({ type: selection.workspaceType, branch: null })
-    } catch (err) {
-      selectWorkspace(undefined)
-      setCreatingWorkspace(false)
-      toast.show({
-        title: "Creating workspace failed",
-        message: errorMessage(err),
-        variant: "error",
-      })
-      return
-    }
-    if (result.error || !result.data) {
-      selectWorkspace(undefined)
-      setCreatingWorkspace(false)
-      toast.show({
-        title: "Creating workspace failed",
-        message: errorMessage(result.error ?? "no response"),
-        variant: "error",
-      })
-      return
-    }
-
-    await project.workspace.sync()
-    const workspace = result.data
-    selectWorkspace({
-      type: "existing",
-      workspaceID: workspace.id,
-      workspaceType: workspace.type,
-      workspaceName: workspace.name,
-    })
-    setCreatingWorkspace(false)
-    return workspace
-  }
-
-  async function warpSession(selection: WorkspaceSelection) {
-    if (!props.sessionID) {
-      selectWorkspace(selection)
-      dialog.clear()
-      if (selection.type === "new") void createWorkspace(selection)
-      return
-    }
-    const sourceWorkspaceID = project.workspace.current()
-    const copyChanges = await confirmWorkspaceFileChanges({ dialog, sdk, sourceWorkspaceID })
-    if (copyChanges === undefined) return
-    selectWorkspace(selection)
-    dialog.clear()
-
-    const workspace =
-      selection.type === "none"
-        ? { id: null, name: "local project" }
-        : selection.type === "existing"
-          ? { id: selection.workspaceID, name: selection.workspaceName }
-          : await createWorkspace(selection)
-    if (!workspace) return
-
-    const warped = await warpWorkspaceSession({
-      dialog,
-      sdk,
-      sync,
-      project,
-      toast,
-      sourceWorkspaceID,
-      workspaceID: workspace.id,
-      sessionID: props.sessionID,
-      copyChanges,
-    })
-    if (warped) showWarpNotice(workspace.name)
-  }
 
   const [scrollbar, setScrollbar] = createSignal<string[] | null>(null)
   function syncScrollbar() {
@@ -419,15 +325,6 @@ export function Prompt(props: PromptProps) {
       return
     }
     if (scrollbar() !== null) setScrollbar(null)
-  })
-
-  createEffect(() => {
-    if (!workspaceCreating()) {
-      setWorkspaceCreatingDots(3)
-      return
-    }
-    const timer = setInterval(() => setWorkspaceCreatingDots((dots) => (dots % 3) + 1), 1000)
-    onCleanup(() => clearInterval(timer))
   })
 
   function promptModelWarning() {
@@ -1162,16 +1059,17 @@ export function Prompt(props: PromptProps) {
         enabled: Flag.OPENCODE_EXPERIMENTAL_WORKSPACES,
         slashName: "warp",
         run: () => {
-          void openWorkspaceSelect({
-            dialog,
-            sdk,
-            sync,
-            project,
-            toast,
-            onSelect: (selection) => {
-              void warpSession(selection)
-            },
-          })
+          workspace.open()
+        },
+      },
+      {
+        title: "Move session",
+        desc: "Move the session to another project directory",
+        name: "session.move",
+        category: "Session",
+        slashName: "move",
+        run: () => {
+          move.open()
         },
       },
     ].map((entry) => ({
@@ -1197,6 +1095,7 @@ export function Prompt(props: PromptProps) {
       "session.interrupt",
       "session.copy_mode",
       "workspace.set",
+      "session.move",
     ]),
   }))
 
@@ -1769,7 +1668,7 @@ export function Prompt(props: PromptProps) {
   }
 
   async function submitInner() {
-    setWarpNotice(undefined)
+    workspace.clearNotice()
 
     // IME: double-defer may fire before onContentChange flushes the last
     // composed character (e.g. Korean hangul) to the store, so read
@@ -1779,7 +1678,7 @@ export function Prompt(props: PromptProps) {
       syncExtmarksWithPromptParts()
     }
     if (props.disabled) return false
-    if (workspaceCreating()) return false
+    if (workspace.creating() || move.creating()) return false
     if (auto()?.visible) return false
     if (!store.prompt.input) return false
     const agent = local.agent.current()
@@ -1802,16 +1701,7 @@ export function Prompt(props: PromptProps) {
       dialog.replace(() => (
         <DialogWorkspaceUnavailable
           onRestore={() => {
-            void openWorkspaceSelect({
-              dialog,
-              sdk,
-              sync,
-              project,
-              toast,
-              onSelect: (selection) => {
-                void warpSession(selection)
-              },
-            })
+            workspace.open()
             return false
           }}
         />
@@ -1821,16 +1711,22 @@ export function Prompt(props: PromptProps) {
 
     const variant = local.model.variant.current()
     let sessionID = props.sessionID
+    let finishMoveProgress = false
     if (sessionID == null) {
-      const workspace = workspaceSelection()
+      const selectedWorkspace = workspace.selection()
       const workspaceID = iife(() => {
-        if (!workspace) return undefined
-        if (workspace.type === "none") return undefined
-        if (workspace.type === "existing") return workspace.workspaceID
+        if (!selectedWorkspace) return undefined
+        if (selectedWorkspace.type === "none") return undefined
+        if (selectedWorkspace.type === "existing") return selectedWorkspace.workspaceID
         return undefined
       })
 
+      const directory = await move.getDirectory(store.prompt.input)
+      if (move.pending() && !directory) return false
+      finishMoveProgress = Boolean(move.progress())
+
       const res = await sdk.client.session.create({
+        directory,
         workspace: workspaceID,
         agent: agent.name,
         model: {
@@ -1841,6 +1737,7 @@ export function Prompt(props: PromptProps) {
       })
 
       if (res.error) {
+        if (finishMoveProgress) move.finishSubmit()
         console.log("Creating a session failed:", res.error)
 
         toast.show({
@@ -1890,6 +1787,7 @@ export function Prompt(props: PromptProps) {
         : []
 
     if (store.mode === "shell") {
+      move.startSubmit()
       void sdk.client.session.shell({
         sessionID,
         agent: agent.name,
@@ -1908,6 +1806,7 @@ export function Prompt(props: PromptProps) {
         return sync.data.command.some((x) => x.name === command)
       })
     ) {
+      move.startSubmit()
       // Parse command from first line, preserve multi-line content in arguments
       const firstLineEnd = inputText.indexOf("\n")
       const firstLine = firstLineEnd === -1 ? inputText : inputText.slice(0, firstLineEnd)
@@ -1931,6 +1830,7 @@ export function Prompt(props: PromptProps) {
           })),
       })
     } else {
+      move.startSubmit()
       sdk.client.session
         .prompt({
           sessionID,
@@ -1978,6 +1878,7 @@ export function Prompt(props: PromptProps) {
       }, 50)
     }
     input.clear()
+    if (finishMoveProgress) move.finishSubmit()
     return true
   }
   const exit = useExit()
@@ -2218,29 +2119,6 @@ export function Prompt(props: PromptProps) {
     }
     if (!list().length) return undefined
     return `Ask anything... "${list()[store.placeholder % list().length]}"`
-  })
-
-  const workspaceLabel = createMemo<
-    | { type: "new"; workspaceType: string }
-    | { type: "existing"; workspaceType: string; workspaceName: string; status?: WorkspaceStatus }
-    | undefined
-  >(() => {
-    const selected = workspaceSelection()
-    if (!selected) return
-    if (selected.type === "none") return
-    if (props.sessionID && !workspaceCreating()) return
-    if (selected.type === "new") {
-      return {
-        type: "new",
-        workspaceType: selected.workspaceType,
-      }
-    }
-    return {
-      type: "existing",
-      workspaceType: selected.workspaceType,
-      workspaceName: selected.workspaceName,
-      status: selected.type === "existing" ? "connected" : undefined,
-    }
   })
 
   const spinnerDef = createMemo(() => {
@@ -2665,7 +2543,7 @@ export function Prompt(props: PromptProps) {
                 </text>
               </box>
             </Match>
-            <Match when={warpNotice()}>
+            <Match when={workspace.notice()}>
               {(notice) => (
                 <box flexDirection="row" gap={1}>
                   <VimIndicator />
@@ -2673,19 +2551,19 @@ export function Prompt(props: PromptProps) {
                 </box>
               )}
             </Match>
-            <Match when={workspaceLabel()}>
-              {(workspace) => (
+            <Match when={workspace.label()}>
+              {(label) => (
                 <box flexDirection="row" gap={1}>
                   <VimIndicator />
-                  <Show when={workspaceCreating()}>
+                  <Show when={workspace.creating()}>
                     <Spinner color={theme.accent} />
                   </Show>
-                  <text fg={workspaceCreating() ? theme.accent : theme.text}>
+                  <text fg={workspace.creating() ? theme.accent : theme.text}>
                     {(() => {
-                      const item = workspace()
+                      const item = label()
                       if (item.type === "new") {
-                        if (workspaceCreating())
-                          return `Creating ${item.workspaceType}${".".repeat(workspaceCreatingDots())}`
+                        if (workspace.creating())
+                          return `Creating ${item.workspaceType}${".".repeat(workspace.creatingDots())}`
                         return (
                           <>
                             Workspace <span style={{ fg: theme.textMuted }}>(new {item.workspaceType})</span>
@@ -2701,6 +2579,23 @@ export function Prompt(props: PromptProps) {
                   </text>
                 </box>
               )}
+            </Match>
+            <Match when={move.progress()}>
+              {(progress) => (
+                <box flexDirection="row" gap={1}>
+                  <VimIndicator />
+                  <Spinner color={theme.accent}>
+                    {progress()}
+                    <span style={{ fg: theme.textMuted }}>{".".repeat(move.creatingDots())}</span>
+                  </Spinner>
+                </box>
+              )}
+            </Match>
+            <Match when={move.pendingNew()}>
+              <box flexDirection="row" gap={1}>
+                <VimIndicator />
+                <text fg={theme.accent}>(new working copy)</text>
+              </box>
             </Match>
             <Match when={true}>
               <box flexDirection="row" gap={1}>

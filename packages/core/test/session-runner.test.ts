@@ -21,6 +21,7 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionInput } from "@opencode-ai/core/session/input"
+import { SessionMessage } from "@opencode-ai/core/session/message"
 import { Prompt } from "@opencode-ai/core/session/prompt"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
@@ -28,8 +29,10 @@ import { SessionRunCoordinator } from "@opencode-ai/core/session/run-coordinator
 import { SessionRunner } from "@opencode-ai/core/session/runner"
 import * as SessionRunnerLLM from "@opencode-ai/core/session/runner/llm"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
-import { ToolRegistry } from "@opencode-ai/core/tool-registry"
-import { SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
+import { ToolRegistry } from "@opencode-ai/core/tool/registry"
+import { ApplicationTools } from "@opencode-ai/core/tool/application-tools"
+import { NativeTool } from "@opencode-ai/core/tool/native"
+import { SessionInputTable, SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
@@ -92,7 +95,8 @@ const permission = Layer.succeed(
     list: () => Effect.die("unused"),
   }),
 )
-const registry = ToolRegistry.layer.pipe(Layer.provide(permission))
+const applications = ApplicationTools.layer
+const registry = ToolRegistry.layer.pipe(Layer.provide(permission), Layer.provide(applications))
 const echo = Layer.effectDiscard(
   ToolRegistry.Service.use((registry) =>
     registry.contribute((editor) => {
@@ -162,6 +166,7 @@ const it = testEffect(
     store,
     client,
     permission,
+    applications,
     registry,
     echo,
     models,
@@ -240,6 +245,7 @@ const replaySessionProjection = (id: SessionV2.ID) =>
       .pipe(Effect.orDie)
 
     yield* events.remove(id)
+    yield* db.delete(SessionInputTable).where(eq(SessionInputTable.session_id, id)).run().pipe(Effect.orDie)
     yield* db.delete(SessionMessageTable).where(eq(SessionMessageTable.session_id, id)).run().pipe(Effect.orDie)
     yield* events.replayAll(
       recorded.map((event) => ({
@@ -412,6 +418,55 @@ const verifyPartialFlushOnInterruption = (kind: FragmentKind) =>
   })
 
 describe("SessionRunnerLLM", () => {
+  it.effect("advertises and executes a globally attached application tool", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const applicationTools = yield* ApplicationTools.Service
+      const session = yield* SessionV2.Service
+      const contexts: NativeTool.Context[] = []
+      yield* applicationTools.attach({
+        application_context: NativeTool.make({
+          description: "Read application context",
+          parameters: Schema.Struct({ query: Schema.String }),
+          success: Schema.Struct({ answer: Schema.String }),
+          execute: ({ query }, context) =>
+            Effect.sync(() => {
+              contexts.push(context)
+              return { answer: query.toUpperCase() }
+            }),
+        }),
+      })
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Use application context" }), resume: false })
+      responses = [
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.toolCall({ id: "call-application", name: "application_context", input: { query: "hello" } }),
+          LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
+          LLMEvent.finish({ reason: "tool-calls" }),
+        ],
+        [],
+      ]
+
+      yield* session.resume(sessionID)
+
+      expect(requests[0]?.tools.map((tool) => tool.name)).toContain("application_context")
+      expect(contexts).toEqual([{ sessionID, id: "call-application", name: "application_context" }])
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Use application context" },
+        {
+          type: "assistant",
+          content: [
+            {
+              type: "tool",
+              id: "call-application",
+              state: { status: "completed", structured: { answer: "HELLO" } },
+            },
+          ],
+        },
+      ])
+    }),
+  )
+
   it.effect("starts a real runner turn after default prompt recording", () =>
     Effect.gen(function* () {
       yield* setup
@@ -425,7 +480,9 @@ describe("SessionRunnerLLM", () => {
       const message = yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Run automatically" }) })
 
       expect(requests).toHaveLength(1)
-      expect(yield* session.messages({ sessionID })).toEqual([message])
+      expect(yield* session.messages({ sessionID })).toMatchObject([
+        { id: message.id, type: "user", text: "Run automatically" },
+      ])
     }),
   )
 
@@ -1217,9 +1274,11 @@ describe("SessionRunnerLLM", () => {
       const session = yield* SessionV2.Service
       const events = yield* EventV2.Service
       yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Recover interrupted tool" }), resume: false })
-      yield* SessionInput.promoteSteers((yield* Database.Service).db, events, sessionID)
-      const assistant = yield* events.publish(SessionEvent.Step.Started, {
+      yield* SessionInput.promoteSteers((yield* Database.Service).db, events, sessionID, Number.MAX_SAFE_INTEGER)
+      const assistantMessageID = SessionMessage.ID.create()
+      yield* events.publish(SessionEvent.Step.Started, {
         sessionID,
+        assistantMessageID,
         timestamp: yield* DateTime.now,
         agent: "build",
         model: { id: ModelV2.ID.make("fake-model"), providerID: ProviderV2.ID.make("fake") },
@@ -1227,21 +1286,21 @@ describe("SessionRunnerLLM", () => {
       yield* events.publish(SessionEvent.Tool.Input.Started, {
         sessionID,
         timestamp: yield* DateTime.now,
-        assistantMessageID: assistant.id,
+        assistantMessageID,
         callID: "call-interrupted",
         name: "echo",
       })
       yield* events.publish(SessionEvent.Tool.Input.Ended, {
         sessionID,
         timestamp: yield* DateTime.now,
-        assistantMessageID: assistant.id,
+        assistantMessageID,
         callID: "call-interrupted",
         text: '{"text":"stale"}',
       })
       yield* events.publish(SessionEvent.Tool.Called, {
         sessionID,
         timestamp: yield* DateTime.now,
-        assistantMessageID: assistant.id,
+        assistantMessageID,
         callID: "call-interrupted",
         tool: "echo",
         input: { text: "stale" },
@@ -1279,9 +1338,11 @@ describe("SessionRunnerLLM", () => {
         prompt: new Prompt({ text: "Recover interrupted hosted tool" }),
         resume: false,
       })
-      yield* SessionInput.promoteSteers((yield* Database.Service).db, events, sessionID)
-      const assistant = yield* events.publish(SessionEvent.Step.Started, {
+      yield* SessionInput.promoteSteers((yield* Database.Service).db, events, sessionID, Number.MAX_SAFE_INTEGER)
+      const assistantMessageID = SessionMessage.ID.create()
+      yield* events.publish(SessionEvent.Step.Started, {
         sessionID,
+        assistantMessageID,
         timestamp: yield* DateTime.now,
         agent: "build",
         model: { id: ModelV2.ID.make("fake-model"), providerID: ProviderV2.ID.make("fake") },
@@ -1289,21 +1350,21 @@ describe("SessionRunnerLLM", () => {
       yield* events.publish(SessionEvent.Tool.Input.Started, {
         sessionID,
         timestamp: yield* DateTime.now,
-        assistantMessageID: assistant.id,
+        assistantMessageID,
         callID: "call-hosted-interrupted",
         name: "web_search",
       })
       yield* events.publish(SessionEvent.Tool.Input.Ended, {
         sessionID,
         timestamp: yield* DateTime.now,
-        assistantMessageID: assistant.id,
+        assistantMessageID,
         callID: "call-hosted-interrupted",
         text: '{"query":"stale"}',
       })
       yield* events.publish(SessionEvent.Tool.Called, {
         sessionID,
         timestamp: yield* DateTime.now,
-        assistantMessageID: assistant.id,
+        assistantMessageID,
         callID: "call-hosted-interrupted",
         tool: "web_search",
         input: { query: "stale" },
@@ -1337,9 +1398,11 @@ describe("SessionRunnerLLM", () => {
         prompt: new Prompt({ text: "Recover interrupted tool input" }),
         resume: false,
       })
-      yield* SessionInput.promoteSteers((yield* Database.Service).db, events, sessionID)
-      const assistant = yield* events.publish(SessionEvent.Step.Started, {
+      yield* SessionInput.promoteSteers((yield* Database.Service).db, events, sessionID, Number.MAX_SAFE_INTEGER)
+      const assistantMessageID = SessionMessage.ID.create()
+      yield* events.publish(SessionEvent.Step.Started, {
         sessionID,
+        assistantMessageID,
         timestamp: yield* DateTime.now,
         agent: "build",
         model: { id: ModelV2.ID.make("fake-model"), providerID: ProviderV2.ID.make("fake") },
@@ -1347,7 +1410,7 @@ describe("SessionRunnerLLM", () => {
       yield* events.publish(SessionEvent.Tool.Input.Started, {
         sessionID,
         timestamp: yield* DateTime.now,
-        assistantMessageID: assistant.id,
+        assistantMessageID,
         callID: "call-pending-interrupted",
         name: "echo",
       })
@@ -1414,7 +1477,7 @@ describe("SessionRunnerLLM", () => {
       const events = yield* EventV2.Service
       const defect = new Error("fail after prompt promotion")
       let fail = true
-      yield* events.project(SessionEvent.Prompted, () => (fail ? Effect.die(defect) : Effect.void))
+      yield* events.project(SessionEvent.PromptLifecycle.Promoted, () => (fail ? Effect.die(defect) : Effect.void))
       yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Recover promoted input" }), resume: false })
 
       expect(yield* session.resume(sessionID).pipe(Effect.catchDefect(Effect.succeed))).toBe(defect)
@@ -1430,6 +1493,30 @@ describe("SessionRunnerLLM", () => {
       while (requests.length === 0) yield* Effect.yieldNow
 
       expect(userTexts(requests[0]!)).toEqual(["Recover promoted input"])
+    }),
+  )
+
+  it.effect("does not strand a committed promotion when a post-commit listener defects", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      yield* events.listen((event) =>
+        event.type === SessionEvent.PromptLifecycle.Promoted.type
+          ? Effect.die("fail after prompt promotion commits")
+          : Effect.void,
+      )
+      yield* session.prompt({
+        sessionID,
+        prompt: new Prompt({ text: "Run committed promotion" }),
+        resume: false,
+      })
+
+      requests.length = 0
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(1)
+      expect(userTexts(requests[0]!)).toEqual(["Run committed promotion"])
     }),
   )
 

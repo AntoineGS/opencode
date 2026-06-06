@@ -223,7 +223,7 @@ const html = `<!DOCTYPE html>
         <div class="wrap">
           <p class="kicker">OpenCode Vim</p>
           <h1>Vim mode for OpenCode</h1>
-          <p class="lede">OpenCode with built-in Vim motions, navigation, and editing.</p>
+          <p class="lede">An unofficial OpenCode fork with built-in Vim motions, navigation, and editing.</p>
 
           <div class="install">
             <div class="tabs" aria-label="Install method">

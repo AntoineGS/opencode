@@ -8,6 +8,8 @@ import { NodeFileSystem } from "@effect/platform-node"
 import { FSUtil } from "./fs-util"
 import { Global } from "./global"
 import { EffectFlock } from "./util/effect-flock"
+import { LayerNode } from "./effect/layer-node"
+import { filesystem } from "./effect/layer-node-platform"
 import { makeRuntime } from "./effect/runtime"
 import { NpmConfig } from "./npm-config"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
@@ -321,6 +323,7 @@ export const defaultLayer = layer.pipe(
   Layer.provide(NodeFileSystem.layer),
   Layer.provide(CrossSpawnSpawner.defaultLayer),
 )
+export const node = LayerNode.make(layer, [FSUtil.node, Global.node, filesystem, EffectFlock.node, CrossSpawnSpawner.node])
 
 const { runPromise } = makeRuntime(Service, defaultLayer)
 

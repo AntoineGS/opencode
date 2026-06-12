@@ -20,4 +20,6 @@ if (process.versions.bun !== expectedBunVersion) {
 
 cd packages/opencode
 bun typecheck
-bun test test/cli/tui/vim-*.test.ts
+
+cd ../tui
+bun test ./test/cli/tui/vim-*.test.ts

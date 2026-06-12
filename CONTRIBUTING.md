@@ -12,7 +12,8 @@ Use [Bun](https://bun.sh) matching `package.json`.
 bun install
 cd packages/opencode
 bun typecheck
-bun test test/cli/tui/vim-*.test.ts
+cd ../tui
+bun test ./test/cli/tui/vim-*.test.ts
 ```
 
 ## Running locally

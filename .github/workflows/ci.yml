@@ -13,5 +13,5 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-bun
       - name: Run vim tests
-        run: bun test test/cli/tui/vim-motions.test.ts
-        working-directory: packages/opencode
+        run: bun test ./test/cli/tui/vim-*.test.ts
+        working-directory: packages/tui

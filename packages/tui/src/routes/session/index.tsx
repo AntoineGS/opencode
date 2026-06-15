@@ -1565,7 +1565,13 @@ function AssistantMessage(props: {
                 part={part as MappedPart}
                 message={props.message}
                 copy={props.copy}
-                highlights={props.highlights?.get(part.type === "tool" ? `tool-${part.id}` : `text-${part.id}`) ?? []}
+                highlights={
+                  props.highlights?.get(
+                    part.type === "tool"
+                      ? `tool-${part.messageID}-${part.id}`
+                      : `text-${part.messageID}-${part.id}`,
+                  ) ?? []
+                }
               />
             </Show>
           )
@@ -1594,6 +1600,7 @@ function AssistantMessage(props: {
       </Show>
       <Show when={props.message.error && props.message.error.name !== "MessageAbortedError"}>
         <box
+          id={`assistant-error-${props.message.id}`}
           border={["left"]}
           paddingTop={1}
           paddingBottom={1}
@@ -1608,7 +1615,7 @@ function AssistantMessage(props: {
       </Show>
       <Switch>
         <Match when={props.last || final() || props.message.error?.name === "MessageAbortedError"}>
-          <box paddingLeft={3}>
+          <box id={`assistant-summary-${props.message.id}`} paddingLeft={3}>
             <text marginTop={1}>
               <span
                 style={{
@@ -1681,7 +1688,13 @@ function ReasoningPart(props: {
 
   return (
     <Show when={content()}>
-      <box id={"text-" + props.part.id} paddingLeft={3} marginTop={1} flexDirection="column" flexShrink={0}>
+      <box
+        id={`text-${props.part.messageID}-${props.part.id}`}
+        paddingLeft={3}
+        marginTop={1}
+        flexDirection="column"
+        flexShrink={0}
+      >
         <box onMouseUp={toggle}>
           <ReasoningHeader
             toggleable={inMinimal()}
@@ -1764,7 +1777,7 @@ function TextPart(props: {
   const { theme, syntax } = useTheme()
   return (
     <Show when={props.part.text.trim()}>
-      <box id={"text-" + props.part.id} paddingLeft={3} marginTop={1} flexShrink={0}>
+      <box id={`text-${props.part.messageID}-${props.part.id}`} paddingLeft={3} marginTop={1} flexShrink={0}>
         <CopyOverlay
           copy={props.copy?.kind === "text" && props.copy.part === props.part.id ? props.copy : undefined}
           highlights={props.highlights}
@@ -1826,7 +1839,7 @@ function ToolPart(props: {
 
   return (
     <Show when={!shouldHide()}>
-      <box id={"tool-" + props.part.id}>
+      <box id={`tool-${props.part.messageID}-${props.part.id}`}>
         <CopyOverlay
           copy={props.copy?.kind === "tool" && props.copy.part === props.part.id ? props.copy : undefined}
           highlights={props.highlights}
@@ -1975,7 +1988,7 @@ function InlineTool(props: {
 
   return (
     <InlineToolRow
-      id={`tool-inline-${props.subagent ? "subagent-" : ""}${props.part.id}`}
+      id={`tool-inline-${props.subagent ? "subagent-" : ""}${props.part.messageID}-${props.part.id}`}
       icon={props.icon}
       iconColor={props.iconColor}
       color={fg()}
@@ -2040,6 +2053,8 @@ export function InlineToolRow(props: {
           const previousSubagent = previous?.id.startsWith("tool-inline-subagent-") ?? false
           return previous?.id.startsWith("text-") ||
             previous?.id.startsWith("tool-block-") ||
+            previous?.id.startsWith("assistant-error-") ||
+            previous?.id.startsWith("assistant-summary-") ||
             (previousInline && previousSubagent !== Boolean(props.subagent)) ||
             props.separateAfter?.(previous?.id)
             ? 1
@@ -2106,7 +2121,7 @@ function BlockTool(props: {
   const error = createMemo(() => (props.part?.state.status === "error" ? props.part.state.error : undefined))
   return (
     <box
-      id={props.part ? "tool-block-" + props.part.id : undefined}
+      id={props.part ? `tool-block-${props.part.messageID}-${props.part.id}` : undefined}
       border={props.copy?.kind === "tool" && props.copy.part === props.part?.id ? [] : ["left"]}
       paddingTop={1}
       paddingBottom={1}
@@ -2273,7 +2288,7 @@ function Read(props: ToolProps) {
       </InlineTool>
       <For each={loaded()}>
         {(filepath, index) => (
-          <box id={`tool-inline-loaded-${props.part.id}-${index()}`} paddingLeft={3}>
+          <box id={`tool-inline-loaded-${props.part.messageID}-${props.part.id}-${index()}`} paddingLeft={3}>
             <text paddingLeft={3} fg={theme.textMuted}>
               ↳ Loaded {pathFormatter.format(filepath)}
             </text>

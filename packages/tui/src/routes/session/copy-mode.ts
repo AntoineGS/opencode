@@ -129,15 +129,16 @@ export function createCopyMode(input: {
       if (msg.role === "user") continue
 
       for (const part of parts) {
-        if (part.type === "text") meta.set(`text-${part.id}`, { role: "assistant", kind: "text", part: part.id })
+        const partKey = "messageID" in part && typeof part.messageID === "string" ? `${part.messageID}-${part.id}` : part.id
+        if (part.type === "text") meta.set(`text-${partKey}`, { role: "assistant", kind: "text", part: part.id })
         if (part.type === "reasoning") {
           if (!input.thinking()) continue
           if (state().active) continue
-          meta.set(`text-${part.id}`, { role: "assistant", kind: "reasoning", part: part.id })
+          meta.set(`text-${partKey}`, { role: "assistant", kind: "reasoning", part: part.id })
         }
         if (part.type === "tool") {
           if (!input.details() && part.state.status === "completed") continue
-          meta.set(`tool-${part.id}`, { role: "assistant", kind: "tool", part: part.id, tool: part.tool })
+          meta.set(`tool-${partKey}`, { role: "assistant", kind: "tool", part: part.id, tool: part.tool })
         }
       }
     }

@@ -269,7 +269,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TITLE="Homebrew tap update failed for v${{ inputs.version }}"
+          TITLE="[ci]: Homebrew tap update failed for v${{ inputs.version }}"
           BODY_FILE=$(mktemp)
           cat > "$BODY_FILE" <<EOF
           The ocv release workflow failed to update the Homebrew tap for \`v${{ inputs.version }}\`.
@@ -280,7 +280,7 @@ jobs:
             echo "Issue already exists: $TITLE"
             exit 0
           fi
-          gh issue create --title "$TITLE" --body-file "$BODY_FILE"
+          gh issue create --title "$TITLE" --label ci --body-file "$BODY_FILE"
 
       - uses: actions/setup-node@v4
         with:
@@ -317,7 +317,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TITLE="npm publish failed for v${{ inputs.version }}"
+          TITLE="[ci]: npm publish failed for v${{ inputs.version }}"
           BODY_FILE=$(mktemp)
           cat > "$BODY_FILE" <<EOF
           The ocv release workflow failed to publish \`@leohenon/ocv@${{ inputs.version }}\` to npm.
@@ -328,7 +328,7 @@ jobs:
             echo "Issue already exists: $TITLE"
             exit 0
           fi
-          gh issue create --title "$TITLE" --body-file "$BODY_FILE"
+          gh issue create --title "$TITLE" --label ci --body-file "$BODY_FILE"
 
       - name: Fail release on publish errors
         if: steps.npm_publish.outcome == 'failure' || steps.checkout_tap.outcome == 'failure' || steps.update_formula.outcome == 'failure' || steps.push_formula.outcome == 'failure'

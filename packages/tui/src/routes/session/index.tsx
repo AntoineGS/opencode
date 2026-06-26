@@ -167,6 +167,7 @@ const context = createContext<{
   showGenericToolOutput: () => boolean
   showHints: () => boolean
   diffWrapMode: () => "word" | "none"
+  registerCollapsedToggle: (id: string, toggle: () => void) => () => void
   providers: () => ReadonlyMap<string, Provider>
   sync: ReturnType<typeof useSync>
   tui: ReturnType<typeof useTuiConfig>
@@ -247,6 +248,13 @@ export function Session() {
 
   let scroll!: ScrollBoxRenderable
   let prompt: PromptRef | undefined
+  const collapsedToggles = new Map<string, () => void>()
+  const registerCollapsedToggle = (id: string, toggle: () => void) => {
+    collapsedToggles.set(id, toggle)
+    return () => {
+      if (collapsedToggles.get(id) === toggle) collapsedToggles.delete(id)
+    }
+  }
 
   const cm = createCopyMode({
     scroll: () => scroll,
@@ -260,6 +268,12 @@ export function Session() {
         if (!scroll || scroll.isDestroyed) return
         scroll.scrollTo(scroll.scrollHeight)
       }, 50)
+    },
+    toggleCollapsed(id) {
+      const toggle = collapsedToggles.get(id)
+      if (!toggle) return false
+      toggle()
+      return true
     },
   })
 
@@ -1186,6 +1200,7 @@ export function Session() {
           showGenericToolOutput,
           showHints,
           diffWrapMode,
+          registerCollapsedToggle,
           providers,
           sync,
           tui: tuiConfig,
@@ -1288,6 +1303,7 @@ export function Session() {
                                   col: cm.cursorCol(),
                                   visual: !!cm.state().visual,
                                   cursorText: cm.cursorText(),
+                                  action: cm.action(),
                                 }
                               : undefined
                           }
@@ -1317,6 +1333,7 @@ export function Session() {
                                   col: cm.cursorCol(),
                                   visual: !!cm.state().visual,
                                   cursorText: cm.cursorText(),
+                                  action: cm.action(),
                                 }
                               : undefined
                           }
@@ -1920,6 +1937,18 @@ function GenericTool(props: ToolProps) {
     return collapsed().output
   })
 
+  createEffect(() => {
+    if (!collapsed().overflow) return
+    const unregisterID = ctx.registerCollapsedToggle(`tool-${props.part.messageID}-${props.part.id}`, () =>
+      setExpanded((prev) => !prev),
+    )
+    const unregisterPart = ctx.registerCollapsedToggle(props.part.id, () => setExpanded((prev) => !prev))
+    onCleanup(() => {
+      unregisterID()
+      unregisterPart()
+    })
+  })
+
   return (
     <Show
       when={props.output && ctx.showGenericToolOutput()}
@@ -2166,6 +2195,18 @@ function Shell(props: ToolProps) {
   const limited = createMemo(() => {
     if (expanded() || !collapsed().overflow) return output()
     return collapsed().output
+  })
+
+  createEffect(() => {
+    if (!collapsed().overflow) return
+    const unregisterID = ctx.registerCollapsedToggle(`tool-${props.part.messageID}-${props.part.id}`, () =>
+      setExpanded((prev) => !prev),
+    )
+    const unregisterPart = ctx.registerCollapsedToggle(props.part.id, () => setExpanded((prev) => !prev))
+    onCleanup(() => {
+      unregisterID()
+      unregisterPart()
+    })
   })
 
   const workdirDisplay = createMemo(() => {

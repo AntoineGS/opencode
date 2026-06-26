@@ -88,6 +88,7 @@ export function createCopyMode(input: {
   details: () => boolean
   session: Accessor<string>
   toBottom: () => void
+  toggleCollapsed?: (id: string) => boolean
 }) {
   const [state, setState] = createSignal<CopyState>({ ...empty })
   const [unified, setUnified] = createSignal(false)
@@ -419,15 +420,34 @@ export function createCopyMode(input: {
 
   let compensateTimer: ReturnType<typeof setTimeout> | undefined
 
+  function scrollOffset(scroll: ScrollBoxRenderable) {
+    return scroll.scrollTop ?? scroll.y ?? 0
+  }
+
+  function viewportY(scroll: ScrollBoxRenderable) {
+    return scroll.y ?? 0
+  }
+
+  function scrollToOffset(scroll: ScrollBoxRenderable, top: number) {
+    if (typeof scroll.scrollTo === "function") scroll.scrollTo(top)
+    else scroll.scrollBy(top - scrollOffset(scroll))
+  }
+
+  function scrollByScreenDelta(scroll: ScrollBoxRenderable, delta: number) {
+    if (delta === 0) return
+    scrollToOffset(scroll, scrollOffset(scroll) + delta)
+  }
+
   function snapshotScroll() {
     const scr = input.scroll()
     if (!scr) return undefined
-    const scrollY = scr.scrollTop ?? scr.y ?? 0
+    const scrollY = scrollOffset(scr)
+    const top = viewportY(scr)
     const atBottom = scr.scrollHeight > scr.height && scrollY + scr.height >= scr.scrollHeight - 1
     const children = scr.getChildren().toSorted((a, b) => a.y - b.y)
-    const ref = children.find((c) => c.id && c.y + c.height > scr.y)
+    const ref = children.find((c) => c.id && c.y + c.height > top)
     if (!ref?.id) return undefined
-    return { id: ref.id, childY: ref.y, scrollY, atBottom }
+    return { id: ref.id, childY: ref.y - top, scrollY, atBottom }
   }
 
   function compensateScroll(snap: ReturnType<typeof snapshotScroll>, afterSettle?: () => void, fast = false) {
@@ -443,15 +463,12 @@ export function createCopyMode(input: {
       const child = scr.getChildren().find((c) => c.id === snap.id)
       if (!child) return false
       const oldAbsolute = snap.scrollY + snap.childY
-      const newAbsolute = (scr.scrollTop ?? scr.y ?? 0) + child.y
+      const newAbsolute = scrollOffset(scr) + child.y - viewportY(scr)
       const contentDelta = newAbsolute - oldAbsolute
       const cappedDelta = Math.max(-scr.height, Math.min(scr.height, contentDelta))
       if (contentDelta !== 0) {
-        if (snap.atBottom) {
-          if (typeof scr.scrollTo === "function") scr.scrollTo(scr.scrollHeight)
-          else scr.scrollBy(scr.scrollHeight - (scr.scrollTop ?? scr.y ?? 0))
-        } else if (typeof scr.scrollTo === "function") scr.scrollTo(snap.scrollY + cappedDelta)
-        else scr.scrollBy(cappedDelta)
+        if (snap.atBottom) scrollToOffset(scr, scr.scrollHeight)
+        else scrollToOffset(scr, snap.scrollY + cappedDelta)
       }
       return true
     }
@@ -1062,6 +1079,109 @@ export function createCopyMode(input: {
     await writeClipboard(text)
   }
 
+  function isToolToggleRow(row: CopyRow) {
+    if (row.kind !== "tool") return false
+    const text = rowText(row).trim().toLowerCase()
+    return text === "click to expand" || text === "click to collapse"
+  }
+
+  function toolToggleText(row: CopyRow) {
+    if (row.kind !== "tool") return undefined
+    const text = rowText(row).trim().toLowerCase()
+    if (text === "click to expand" || text === "click to collapse") return text
+    return undefined
+  }
+
+  function lastToolToggleIndex(list: CopyRow[], id: string, expectedText?: string) {
+    return list.findLastIndex((candidate) => {
+      if (candidate.id !== id) return false
+      const text = toolToggleText(candidate)
+      return expectedText ? text === expectedText : !!text
+    })
+  }
+
+  function settleToolToggle(
+    id: string,
+    expectedText: string,
+    apply: (idx: number, row: CopyRow) => void,
+    afterSettle?: () => void,
+  ) {
+    if (compensateTimer) clearTimeout(compensateTimer)
+
+    const tryApply = () => {
+      const scr = input.scroll()
+      if (!scr || scr.isDestroyed) return false
+      const list = rows()
+      const idx = lastToolToggleIndex(list, id, expectedText)
+      const next = list[idx]
+      if (!next) return false
+      apply(idx, next)
+      return true
+    }
+
+    let attempts = 0
+    let settled = false
+    const poll = () => {
+      attempts++
+      const applied = tryApply()
+      if (applied && !settled && attempts >= 2) {
+        settled = true
+        afterSettle?.()
+      }
+      if (attempts >= 10) {
+        if (!settled) afterSettle?.()
+        return
+      }
+      compensateTimer = setTimeout(poll, attempts < 4 ? 4 : 16)
+    }
+    compensateTimer = setTimeout(poll, 0)
+  }
+
+  function revealToolToggle(id: string, expectedText: string, afterSettle?: () => void) {
+    settleToolToggle(id, expectedText, (idx) => sync(idx), afterSettle)
+  }
+
+  function preserveToolToggleOffset(id: string, expectedText: string, offset: number, afterSettle?: () => void) {
+    settleToolToggle(
+      id,
+      expectedText,
+      (_, row) => {
+        const scr = input.scroll()
+        scrollByScreenDelta(scr, row.y - viewportY(scr) - offset)
+      },
+      afterSettle,
+    )
+  }
+
+  function toggleCollapsed() {
+    const s = state()
+    if (!s.active) return false
+    const list = rows()
+    const row = list[s.idx]
+    if (!row || !isToolToggleRow(row)) return false
+    if (lastToolToggleIndex(list, row.id) !== s.idx) return false
+    const text = rowText(row).trim().toLowerCase()
+    const expanding = text === "click to expand"
+    const offset = row.y - viewportY(input.scroll())
+    const targetID = row.id
+    const expectedText = expanding ? "click to collapse" : "click to expand"
+    const toggled = Boolean(input.toggleCollapsed?.(row.id) || (row.part ? input.toggleCollapsed?.(row.part) : false))
+    if (toggled) {
+      const restoreCursor = () => {
+        const list = rows()
+        const idx = lastToolToggleIndex(list, targetID, expectedText)
+        const next = list[idx]
+        if (!next) return
+        if (expanding) sync(idx)
+        else setState((prev) => ({ ...prev, active: true, idx }))
+        setState((prev) => ({ ...prev, col: copyMin(next), stick: "first" }))
+      }
+      if (expanding) revealToolToggle(targetID, expectedText, restoreCursor)
+      else preserveToolToggleOffset(targetID, expectedText, offset, restoreCursor)
+    }
+    return toggled
+  }
+
   // --- jumps ---
 
   function jump(action: "top" | "bottom" | "high" | "middle" | "low") {
@@ -1314,6 +1434,17 @@ export function createCopyMode(input: {
     return " "
   })
 
+  const action = createMemo(() => {
+    const s = state()
+    if (!s.active || s.visual) return undefined
+    const list = rows()
+    const row = list[s.idx]
+    if (!row || !isToolToggleRow(row) || lastToolToggleIndex(list, row.id) !== s.idx) return undefined
+    const text = rowText(row).trim()
+    if (!text) return undefined
+    return { kind: "tool-toggle" as const, left: copyMin(row), text }
+  })
+
   return {
     prompt: {
       enter,
@@ -1325,6 +1456,7 @@ export function createCopyMode(input: {
       yankLine,
       yankMatchingBracket,
       copy,
+      toggleCollapsed,
       isVisual: () => !!state().visual,
       exitVisual,
       visualMode: () => state().visual,
@@ -1368,5 +1500,6 @@ export function createCopyMode(input: {
     state,
     cursorCol,
     cursorText,
+    action,
   }
 }

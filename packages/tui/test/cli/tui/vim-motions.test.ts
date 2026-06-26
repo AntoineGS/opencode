@@ -163,6 +163,7 @@ function createHandler(
       idx?: number
       rows?: Array<{ col: number }>
       isVisual?: boolean
+      toggleCollapsed?: () => boolean
     }
     register?: {
       get?: () => { text: string; linewise: boolean } | null
@@ -228,6 +229,7 @@ function createHandler(
   let copyYanks = 0
   let copyYankLines = 0
   let copyCopies = 0
+  let copyToggleCollapseds = 0
   let copyExitVisuals = 0
   let copyExits = 0
   const copyExitArgs: Array<boolean | undefined> = []
@@ -452,6 +454,10 @@ function createHandler(
     copyCopy() {
       copyCopies++
     },
+    copyToggleCollapsed() {
+      copyToggleCollapseds++
+      return options?.copy?.toggleCollapsed?.() ?? false
+    },
     copyIsVisual() {
       return copyVisual() !== undefined
     },
@@ -602,6 +608,7 @@ function createHandler(
     copyYanks: () => copyYanks,
     copyYankLines: () => copyYankLines,
     copyCopies: () => copyCopies,
+    copyToggleCollapseds: () => copyToggleCollapseds,
     copyExitVisuals: () => copyExitVisuals,
     copyExits: () => copyExits,
     copyExitArgs,
@@ -7904,6 +7911,304 @@ describe("copy mode", () => {
     expect(cm.prompt.yankLine()).toEqual({ text: `- ${line}`, linewise: false })
   })
 
+  test("copy mode toggles collapsed tool output and keeps cursor on toggle row", async () => {
+    let toggles = 0
+    let lines = ["# Shell", "$ echo hello", "Click to expand", "hello click to expand world", "Click to expand"]
+    const child = {
+      id: "tool-message-part",
+      y: 0,
+      get height() {
+        return lines.length
+      },
+      getChildren: () => [
+        {
+          _y: 0,
+          get plainText() {
+            return lines.join("\n")
+          },
+          lineInfo: {
+            get lineSources() {
+              return lines.map((_, i) => i)
+            },
+            get lineStartCols() {
+              return lines.map(() => 0)
+            },
+            get lineWidthCols() {
+              return lines.map((line) => Bun.stringWidth(line))
+            },
+            get lineWraps() {
+              return lines.map(() => 0)
+            },
+          },
+        },
+      ],
+    }
+    const scroll = {
+      y: 0,
+      height: 10,
+      width: 120,
+      get scrollHeight() {
+        return lines.length
+      },
+      getChildren: () => [child],
+      scrollBy() {},
+    } as unknown as ScrollBoxRenderable
+    const cm = createCopyMode({
+      scroll: () => scroll,
+      messages: () => [{ id: "message", role: "assistant" }],
+      parts: () =>
+        [
+          {
+            id: "part",
+            messageID: "message",
+            type: "tool",
+            tool: "bash",
+            state: { status: "completed", input: {}, output: "hello" },
+          } as Part,
+        ],
+      thinking: () => false,
+      details: () => true,
+      session: () => "session",
+      toBottom() {},
+      toggleCollapsed(id) {
+        expect(id).toBe("tool-message-part")
+        toggles++
+        lines = ["# Shell", "$ echo hello", "Click to collapse", "hello click to collapse world", "more output", "Click to collapse"]
+        return true
+      },
+    })
+
+    cm.prompt.enter()
+    cm.prompt.jump("top")
+    cm.prompt.move("down")
+    cm.prompt.move("down")
+
+    expect(cm.prompt.text().trim()).toBe("Click to expand")
+    expect(cm.action()).toBeUndefined()
+    expect(cm.prompt.toggleCollapsed()).toBe(false)
+    expect(toggles).toBe(0)
+
+    cm.prompt.move("down")
+    expect(cm.prompt.text()).toContain("hello click to expand world")
+    expect(cm.action()).toBeUndefined()
+    expect(cm.prompt.toggleCollapsed()).toBe(false)
+    expect(toggles).toBe(0)
+
+    cm.prompt.jump("bottom")
+
+    expect(cm.prompt.text()).toContain("Click to expand")
+    expect(cm.action()).toMatchObject({ kind: "tool-toggle", text: "Click to expand" })
+    expect(cm.prompt.toggleCollapsed()).toBe(true)
+    await new Promise((resolve) => setTimeout(resolve, 80))
+
+    expect(toggles).toBe(1)
+    expect(cm.prompt.text().trim()).toBe("Click to collapse")
+    expect(cm.action()).toMatchObject({ kind: "tool-toggle", text: "Click to collapse" })
+  })
+
+  test("copy mode tool toggle waits for updated label before restoring cursor", async () => {
+    const collapsedLines = ["# Shell", "$ echo hello", "hello", "Click to expand"]
+    const expandedLines = [
+      "# Shell",
+      "$ echo hello",
+      ...Array.from({ length: 12 }, (_, i) => `output ${i}`),
+      "Click to collapse",
+    ]
+    let lines = expandedLines
+    let scrollY = 19
+    const childTop = 20
+    const child = {
+      id: "tool-message-part",
+      get y() {
+        return childTop - scrollY
+      },
+      get height() {
+        return lines.length
+      },
+      getChildren: () => [
+        {
+          _y: 0,
+          get plainText() {
+            return lines.join("\n")
+          },
+          lineInfo: {
+            get lineSources() {
+              return lines.map((_, i) => i)
+            },
+            get lineStartCols() {
+              return lines.map(() => 0)
+            },
+            get lineWidthCols() {
+              return lines.map((line) => Bun.stringWidth(line))
+            },
+            get lineWraps() {
+              return lines.map(() => 0)
+            },
+          },
+        },
+      ],
+    }
+    const scroll = {
+      y: 0,
+      get scrollTop() {
+        return scrollY
+      },
+      height: 10,
+      width: 120,
+      get scrollHeight() {
+        return childTop + lines.length + 20
+      },
+      getChildren: () => [child],
+      scrollBy(delta: number) {
+        scrollY += delta
+      },
+      scrollTo(top: number) {
+        scrollY = top
+      },
+    } as unknown as ScrollBoxRenderable
+    const cm = createCopyMode({
+      scroll: () => scroll,
+      messages: () => [{ id: "message", role: "assistant" }],
+      parts: () =>
+        [
+          {
+            id: "part",
+            messageID: "message",
+            type: "tool",
+            tool: "bash",
+            state: { status: "completed", input: {}, output: "hello" },
+          } as Part,
+        ],
+      thinking: () => false,
+      details: () => true,
+      session: () => "session",
+      toBottom() {},
+      toggleCollapsed() {
+        setTimeout(() => {
+          lines = collapsedLines
+        }, 25)
+        return true
+      },
+    })
+
+    cm.prompt.enter()
+    cm.prompt.jump("bottom")
+    expect(cm.prompt.text().trim()).toBe("Click to collapse")
+
+    expect(cm.prompt.toggleCollapsed()).toBe(true)
+    await new Promise((resolve) => setTimeout(resolve, 80))
+
+    expect(cm.prompt.text().trim()).toBe("Click to expand")
+    expect(cm.action()).toMatchObject({ kind: "tool-toggle", text: "Click to expand" })
+  })
+
+  test("copy mode tool toggle reveals expanded output and preserves collapse offset", async () => {
+    const collapsedLines = ["# Shell", "$ echo hello", "hello", "Click to expand"]
+    const expandedLines = [
+      "# Shell",
+      "$ echo hello",
+      ...Array.from({ length: 12 }, (_, i) => `output ${i}`),
+      "Click to collapse",
+    ]
+    let lines = collapsedLines
+    let scrollY = 19
+    const childTop = 20
+    const child = {
+      id: "tool-message-part",
+      get y() {
+        return childTop - scrollY
+      },
+      get height() {
+        return lines.length
+      },
+      getChildren: () => [
+        {
+          _y: 0,
+          get plainText() {
+            return lines.join("\n")
+          },
+          lineInfo: {
+            get lineSources() {
+              return lines.map((_, i) => i)
+            },
+            get lineStartCols() {
+              return lines.map(() => 0)
+            },
+            get lineWidthCols() {
+              return lines.map((line) => Bun.stringWidth(line))
+            },
+            get lineWraps() {
+              return lines.map(() => 0)
+            },
+          },
+        },
+      ],
+    }
+    const scroll = {
+      y: 0,
+      get scrollTop() {
+        return scrollY
+      },
+      height: 10,
+      width: 120,
+      get scrollHeight() {
+        return childTop + lines.length + 20
+      },
+      getChildren: () => [child],
+      scrollBy(delta: number) {
+        scrollY += delta
+      },
+      scrollTo(top: number) {
+        scrollY = top
+      },
+    } as unknown as ScrollBoxRenderable
+    const cm = createCopyMode({
+      scroll: () => scroll,
+      messages: () => [{ id: "message", role: "assistant" }],
+      parts: () =>
+        [
+          {
+            id: "part",
+            messageID: "message",
+            type: "tool",
+            tool: "bash",
+            state: { status: "completed", input: {}, output: "hello" },
+          } as Part,
+        ],
+      thinking: () => false,
+      details: () => true,
+      session: () => "session",
+      toBottom() {},
+      toggleCollapsed() {
+        lines = lines === collapsedLines ? expandedLines : collapsedLines
+        return true
+      },
+    })
+
+    cm.prompt.enter()
+    cm.prompt.jump("bottom")
+    expect(cm.prompt.text().trim()).toBe("Click to expand")
+    expect(scrollY).toBe(19)
+
+    expect(cm.prompt.toggleCollapsed()).toBe(true)
+    await new Promise((resolve) => setTimeout(resolve, 80))
+
+    expect(cm.prompt.text().trim()).toBe("Click to collapse")
+    expect(scrollY).toBe(childTop + expandedLines.length - scroll.height)
+
+    expect(cm.prompt.toggleCollapsed()).toBe(true)
+    await new Promise((resolve) => setTimeout(resolve, 80))
+
+    expect(cm.prompt.text().trim()).toBe("Click to expand")
+    expect(scrollY).toBe(childTop + collapsedLines.length - scroll.height)
+
+    expect(cm.prompt.toggleCollapsed()).toBe(true)
+    await new Promise((resolve) => setTimeout(resolve, 80))
+
+    expect(cm.prompt.text().trim()).toBe("Click to collapse")
+    expect(scrollY).toBe(childTop + expandedLines.length - scroll.height)
+  })
+
   test("yank line includes visible same-row prefixes", () => {
     const line = "Inspect current branch"
     const child = {
@@ -9167,6 +9472,19 @@ describe("copy mode", () => {
     expect(evt.prevented()).toBe(true)
     expect(ctx.copyCopies()).toBe(1)
     expect(ctx.copyYanks()).toBe(0)
+    expect(ctx.copyExits()).toBe(1)
+    expect(ctx.copyExitPreserveScrolls()).toBe(0)
+    expect(ctx.state.mode()).toBe("normal")
+  })
+
+  test("shift+return copies instead of toggling collapsed tool output", () => {
+    const ctx = createHandler("abc", { mode: "copy", copy: { toggleCollapsed: () => true } })
+
+    const evt = createEvent("return", { shift: true })
+    expect(ctx.handler.handleKey(evt.event)).toBe(true)
+    expect(evt.prevented()).toBe(true)
+    expect(ctx.copyToggleCollapseds()).toBe(0)
+    expect(ctx.copyCopies()).toBe(1)
     expect(ctx.copyExits()).toBe(1)
     expect(ctx.copyExitPreserveScrolls()).toBe(0)
     expect(ctx.state.mode()).toBe("normal")

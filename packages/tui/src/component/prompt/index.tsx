@@ -105,6 +105,7 @@ export type PromptProps = {
     yankLine: () => { text: string; linewise: boolean } | null
     yankMatchingBracket: () => { text: string; linewise: boolean } | null
     copy: () => Promise<void> | void
+    toggleCollapsed: () => boolean
     isVisual: () => boolean
     exitVisual: () => void
     visualMode: () => undefined | "char" | "line" | "block"
@@ -731,6 +732,9 @@ export function Prompt(props: PromptProps) {
     },
     copyCopy() {
       return props.copy?.copy()
+    },
+    copyToggleCollapsed() {
+      return props.copy?.toggleCollapsed() ?? false
     },
     copyIsVisual() {
       return props.copy?.isVisual() ?? false
@@ -1415,6 +1419,13 @@ export function Prompt(props: PromptProps) {
   onCleanup(restoreCopyModeSuspend)
 
   function submitFromTextarea() {
+    if (vimState.isCopy()) {
+      if (!props.copy?.isVisual() && props.copy?.toggleCollapsed()) return
+      props.copy?.copy()
+      props.copy?.exitPreserveScroll()
+      vimState.setMode("normal")
+      return
+    }
     if (store.mode !== "normal") {
       submit()
       return

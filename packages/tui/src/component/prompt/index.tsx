@@ -63,11 +63,15 @@ import { emptyRows } from "./empty-selection"
 import { CONSOLE_MANAGED_ICON, consoleManagedProviderLabel } from "../../util/provider-origin"
 import {
   OPENCODE_BASE_MODE,
+  OPENCODE_COPY_MODE,
+  OPENCODE_COPY_MODE_ENTER_KEYS,
+  OPENCODE_COPY_MODE_EXIT_KEYS,
+  OPENCODE_COPY_MODE_TOGGLE_KEYS,
   useBindings,
   useCommandShortcut,
   useLeaderActive,
   useOpencodeKeymap,
-  VIM_WINDOW_TOKEN,
+  useOpencodeModeStack,
 } from "../../keymap"
 import { useTuiConfig } from "../../config"
 import { usePromptWorkspace } from "./workspace"
@@ -81,6 +85,7 @@ export type PromptProps = {
   workspaceID?: string
   visible?: boolean
   disabled?: boolean
+  copyDuringModal?: boolean
   onSubmit?: () => void
   ref?: (ref: PromptRef | undefined) => void
   hint?: JSX.Element
@@ -227,6 +232,7 @@ export function Prompt(props: PromptProps) {
   const history = usePromptHistory()
   const stash = usePromptStash()
   const keymap = useOpencodeKeymap()
+  const modeStack = useOpencodeModeStack()
   const agentShortcut = useCommandShortcut("agent.cycle")
   const paletteShortcut = useCommandShortcut("command.palette.show")
   const variantShortcut = useCommandShortcut("variant.cycle")
@@ -466,9 +472,21 @@ export function Prompt(props: PromptProps) {
     enabled: vimEnabled,
     initial: () => lastVimMode,
   })
+  let popCopyMode: (() => void) | undefined
   onCleanup(() => {
+    popCopyMode?.()
     if (vimEnabled()) lastVimMode = vimState.isCopy() ? "normal" : vimState.mode()
   })
+
+  createEffect(() => {
+    if (vimState.isCopy()) {
+      if (!popCopyMode) popCopyMode = modeStack.push(OPENCODE_COPY_MODE)
+      return
+    }
+    popCopyMode?.()
+    popCopyMode = undefined
+  })
+
   const vimIndicator = useVimIndicator({
     enabled: vimEnabled,
     active: () => store.mode === "normal",
@@ -493,21 +511,47 @@ export function Prompt(props: PromptProps) {
     return input.plainText.length > 0
   }
 
+  function enterCopyMode() {
+    if (!vimEnabled() || !props.copy) return false
+    vimState.setMode("copy")
+    props.copy.enter()
+    if (input && !input.isDestroyed && !input.focused) input.focus()
+    dialog.clear()
+    return true
+  }
+
+  function exitCopyMode(scrollToBottom?: boolean) {
+    if (!props.copy) return false
+    vimState.setMode("normal")
+    props.copy.exit(scrollToBottom)
+    dialog.clear()
+    return true
+  }
+
+  function copyEligible() {
+    return (
+      inputTarget() !== undefined &&
+      vimEnabled() &&
+      store.mode === "normal" &&
+      (!props.disabled || props.copyDuringModal)
+    )
+  }
+
   function handleNavigation(action: "up" | "down") {
     if (!props.copy) return
     if (action === "up" && !vimState.isCopy()) {
-      vimState.setMode("copy")
-      props.copy.enter()
+      keymap.dispatchCommand("session.copy_mode")
     }
     if (action === "down" && vimState.isCopy()) {
       const skipExit = vimState.skipExitOnModeChange()
       const scrollToBottom = vimState.exitScrollToBottom()
       vimState.setSkipExitOnModeChange(false)
       vimState.setExitScrollToBottom(true)
-      vimState.setMode("normal")
       if (!skipExit) {
-        props.copy.exit(scrollToBottom)
+        exitCopyMode(scrollToBottom)
+        return
       }
+      vimState.setMode("normal")
     }
   }
 
@@ -658,10 +702,11 @@ export function Prompt(props: PromptProps) {
       props.copy?.exitVisual()
     },
     copyExit(scrollToBottom) {
-      props.copy?.exit(scrollToBottom)
+      exitCopyMode(scrollToBottom)
     },
     copyExitPreserveScroll() {
       props.copy?.exitPreserveScroll()
+      vimState.setMode("normal")
     },
     copyFocusInput() {
       props.copy?.focusInput()
@@ -1062,14 +1107,10 @@ export function Prompt(props: PromptProps) {
         run: () => {
           if (!vimEnabled() || !props.copy) return
           if (vimState.isCopy()) {
-            vimState.setMode("normal")
-            props.copy.exit()
-            dialog.clear()
+            exitCopyMode()
             return
           }
-          vimState.setMode("copy")
-          props.copy.enter()
-          dialog.clear()
+          enterCopyMode()
         },
       },
       {
@@ -1163,12 +1204,7 @@ export function Prompt(props: PromptProps) {
   useBindings(() => ({
     target: inputTarget,
     priority: 100,
-    enabled:
-      inputTarget() !== undefined &&
-      !props.disabled &&
-      vimEnabled() &&
-      store.mode === "normal" &&
-      vimState.isCopy(),
+    enabled: copyEligible() && vimState.isCopy(),
     bindings: ["ctrl+d", "ctrl+u", "ctrl+f", "ctrl+b", "ctrl+e", "ctrl+y"].map((key) => ({
       key,
       desc: "Scroll copy mode",
@@ -1180,13 +1216,7 @@ export function Prompt(props: PromptProps) {
   useBindings(() => ({
     target: inputTarget,
     priority: 200,
-    enabled:
-      inputTarget() !== undefined &&
-      !props.disabled &&
-      vimEnabled() &&
-      store.mode === "normal" &&
-      vimState.isCopy() &&
-      !!props.copy?.searchActive(),
+    enabled: copyEligible() && vimState.isCopy() && !!props.copy?.searchActive(),
     bindings: [
       ...["backspace", "shift+backspace", "delete", "ctrl+h"].map((key) => ({
         key,
@@ -1217,14 +1247,7 @@ export function Prompt(props: PromptProps) {
   useBindings(() => ({
     target: inputTarget,
     priority: 200,
-    enabled:
-      inputTarget() !== undefined &&
-      !props.disabled &&
-      vimEnabled() &&
-      store.mode === "normal" &&
-      vimState.isCopy() &&
-      !props.copy?.isVisual() &&
-      !!props.copy?.searchHighlighted(),
+    enabled: copyEligible() && vimState.isCopy() && !props.copy?.isVisual() && !!props.copy?.searchHighlighted(),
     bindings: [
       {
         key: "escape",
@@ -1242,51 +1265,36 @@ export function Prompt(props: PromptProps) {
   useBindings(() => ({
     target: inputTarget,
     priority: 100,
-    enabled:
-      inputTarget() !== undefined &&
-      !props.disabled &&
-      vimEnabled() &&
-      store.mode === "normal" &&
-      !vimState.isInsert() &&
-      !vimState.isReplace() &&
-      !!props.copy,
+    enabled: copyEligible() && !vimState.isInsert() && !vimState.isReplace() && !!props.copy,
     bindings: [
       {
-        key: `<${VIM_WINDOW_TOKEN}>k,<${VIM_WINDOW_TOKEN}>ctrl+k`,
+        key: OPENCODE_COPY_MODE_ENTER_KEYS,
         desc: "Enter copy mode",
         group: "Session",
         cmd: () => {
           if (vimState.isCopy()) return false
-          vimState.setMode("copy")
-          props.copy?.enter()
-          dialog.clear()
+          keymap.dispatchCommand("session.copy_mode")
         },
       },
       {
-        key: `<${VIM_WINDOW_TOKEN}>w,<${VIM_WINDOW_TOKEN}><${VIM_WINDOW_TOKEN}>,<${VIM_WINDOW_TOKEN}>ctrl+w`,
+        key: OPENCODE_COPY_MODE_TOGGLE_KEYS,
         desc: "Toggle copy mode",
         group: "Session",
         cmd: () => {
           if (vimState.isCopy()) {
-            vimState.setMode("normal")
-            props.copy?.exit(false)
-            dialog.clear()
+            exitCopyMode(false)
             return
           }
-          vimState.setMode("copy")
-          props.copy?.enter()
-          dialog.clear()
+          keymap.dispatchCommand("session.copy_mode")
         },
       },
       {
-        key: `<${VIM_WINDOW_TOKEN}>j,<${VIM_WINDOW_TOKEN}>ctrl+j`,
+        key: OPENCODE_COPY_MODE_EXIT_KEYS,
         desc: "Exit copy mode",
         group: "Session",
         cmd: () => {
           if (!vimState.isCopy()) return false
-          vimState.setMode("normal")
-          props.copy?.exit(false)
-          dialog.clear()
+          exitCopyMode(false)
         },
       },
     ],
@@ -1349,7 +1357,7 @@ export function Prompt(props: PromptProps) {
 
   createEffect(() => {
     if (!input || input.isDestroyed) return
-    if (props.visible === false || dialog.stack.length > 0) {
+    if (props.visible === false || dialog.stack.length > 0 || (props.disabled && !vimState.isCopy())) {
       if (input.focused) input.blur()
       vimState.clearPending()
       return
@@ -2236,7 +2244,7 @@ export function Prompt(props: PromptProps) {
                 setCursorVersion((value) => value + 1)
               }}
               onKeyDown={async (e: KeyEvent & { preventDefault(): void; defaultPrevented?: boolean }) => {
-                if (props.disabled) {
+                if (props.disabled && !vimState.isCopy()) {
                   e.preventDefault()
                   return
                 }

@@ -7,7 +7,13 @@ import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
 import { useSDK } from "../../context/sdk"
 import { SplitBorder } from "../../ui/border"
 import { useTuiConfig } from "../../config"
-import { useBindings, useOpencodeModeStack } from "../../keymap"
+import {
+  OPENCODE_COPY_MODE_ENTER_KEYS,
+  OPENCODE_COPY_MODE_TOGGLE_KEYS,
+  useBindings,
+  useOpencodeKeymap,
+  useOpencodeModeStack,
+} from "../../keymap"
 
 const QUESTION_MODE = "question"
 
@@ -16,6 +22,7 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
   const { theme } = useTheme()
   const renderer = useRenderer()
   const tuiConfig = useTuiConfig()
+  const keymap = useOpencodeKeymap()
   const modeStack = useOpencodeModeStack()
 
   const questions = createMemo(() => props.request.questions)
@@ -230,6 +237,24 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
         },
       ],
       bindings: [
+        ...tuiConfig.keybinds.get("session.copy_mode").map((binding) => ({
+          ...binding,
+          desc: "Enter copy mode",
+          group: "Question",
+          cmd: () => keymap.dispatchCommand("session.copy_mode"),
+        })),
+        {
+          key: OPENCODE_COPY_MODE_ENTER_KEYS,
+          desc: "Enter copy mode",
+          group: "Question",
+          cmd: () => keymap.dispatchCommand("session.copy_mode"),
+        },
+        {
+          key: OPENCODE_COPY_MODE_TOGGLE_KEYS,
+          desc: "Enter copy mode",
+          group: "Question",
+          cmd: () => keymap.dispatchCommand("session.copy_mode"),
+        },
         {
           key: "left",
           desc: "Previous question",

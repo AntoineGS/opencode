@@ -1725,6 +1725,7 @@ export function createVimHandler(input: {
     }
     if (key === "q") {
       input.state.setMode("normal")
+      input.copyExit?.()
       event.preventDefault()
       return true
     }
@@ -1747,6 +1748,7 @@ export function createVimHandler(input: {
         return true
       }
       input.state.setMode("normal")
+      input.copyExit?.()
       event.preventDefault()
       return true
     }

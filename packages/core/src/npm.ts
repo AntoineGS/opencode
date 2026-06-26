@@ -324,7 +324,11 @@ export const defaultLayer = layer.pipe(
   Layer.provide(NodeFileSystem.layer),
   Layer.provide(CrossSpawnSpawner.defaultLayer),
 )
-export const node = LayerNode.make(layer, [FSUtil.node, Global.node, filesystem, EffectFlock.node, CrossSpawnSpawner.node])
+export const node = LayerNode.make({
+  service: Service,
+  layer: layer,
+  deps: [FSUtil.node, Global.node, filesystem, EffectFlock.node, CrossSpawnSpawner.node],
+})
 
 const { runPromise } = makeRuntime(Service, defaultLayer)
 

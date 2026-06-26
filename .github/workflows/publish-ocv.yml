@@ -247,14 +247,14 @@ jobs:
           git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -m "Update ocv formula v${{ inputs.version }}"
           git push
 
-      - name: Close Homebrew failure issue
+      - name: Close Homebrew failure issues
         if: steps.checkout_tap.outcome == 'success' && steps.update_formula.outcome == 'success' && steps.push_formula.outcome == 'success'
         continue-on-error: true
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          NUMBERS=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --limit 100 --search "Homebrew tap update failed in:title" --json number,title --jq '.[] | select(.title | test("^(\\[ci\\]: )?Homebrew tap update failed for v[0-9]+\\.[0-9]+\\.[0-9]+-ocv\\.[0-9]+\\.[0-9]+$")) | .number')
+          NUMBERS=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --limit 100 --search "Homebrew tap update failed in:title" --json number,title --jq '.[] | select(.title | test("^\\[ci\\]: Homebrew tap update failed for v[0-9]+\\.[0-9]+\\.[0-9]+-ocv\\.[0-9]+\\.[0-9]+$")) | .number')
           if [ -z "$NUMBERS" ]; then
             echo "No open Homebrew failure issue found"
             exit 0
@@ -278,11 +278,11 @@ jobs:
 
           Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           EOF
-          if gh issue list --state open --search "$TITLE in:title" --json title --jq '.[].title' | grep -Fxq "$TITLE"; then
+          if gh issue list --repo "$GITHUB_REPOSITORY" --state open --limit 100 --search "Homebrew tap update failed in:title" --json title --jq '.[].title' | grep -Fxq "$TITLE"; then
             echo "Issue already exists: $TITLE"
             exit 0
           fi
-          gh issue create --title "$TITLE" --label ci --body-file "$BODY_FILE"
+          gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --label ci --body-file "$BODY_FILE"
 
       - uses: actions/setup-node@v4
         with:
@@ -297,14 +297,14 @@ jobs:
           OPENCODE_VERSION: ${{ inputs.version }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Close npm failure issue
+      - name: Close npm failure issues
         if: steps.npm_publish.outcome == 'success'
         continue-on-error: true
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          NUMBERS=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --limit 100 --search "npm publish failed in:title" --json number,title --jq '.[] | select(.title | test("^(\\[ci\\]: )?npm publish failed for v[0-9]+\\.[0-9]+\\.[0-9]+-ocv\\.[0-9]+\\.[0-9]+$")) | .number')
+          NUMBERS=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --limit 100 --search "npm publish failed in:title" --json number,title --jq '.[] | select(.title | test("^\\[ci\\]: npm publish failed for v[0-9]+\\.[0-9]+\\.[0-9]+-ocv\\.[0-9]+\\.[0-9]+$")) | .number')
           if [ -z "$NUMBERS" ]; then
             echo "No open npm failure issue found"
             exit 0
@@ -328,11 +328,11 @@ jobs:
 
           Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           EOF
-          if gh issue list --state open --search "$TITLE in:title" --json title --jq '.[].title' | grep -Fxq "$TITLE"; then
+          if gh issue list --repo "$GITHUB_REPOSITORY" --state open --limit 100 --search "npm publish failed in:title" --json title --jq '.[].title' | grep -Fxq "$TITLE"; then
             echo "Issue already exists: $TITLE"
             exit 0
           fi
-          gh issue create --title "$TITLE" --label ci --body-file "$BODY_FILE"
+          gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --label ci --body-file "$BODY_FILE"
 
       - name: Fail release on publish errors
         if: steps.npm_publish.outcome == 'failure' || steps.checkout_tap.outcome == 'failure' || steps.update_formula.outcome == 'failure' || steps.push_formula.outcome == 'failure'

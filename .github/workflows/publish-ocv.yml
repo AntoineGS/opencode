@@ -254,7 +254,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TITLE="Homebrew tap update failed for v${{ inputs.version }}"
+          TITLE="[ci]: Homebrew tap update failed for v${{ inputs.version }}"
           NUMBER=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "$TITLE in:title" --json number,title --jq "map(select(.title == \"$TITLE\")) | first | .number // \"\"")
           if [ -z "$NUMBER" ]; then
             echo "No open Homebrew failure issue found"
@@ -302,7 +302,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TITLE="npm publish failed for v${{ inputs.version }}"
+          TITLE="[ci]: npm publish failed for v${{ inputs.version }}"
           NUMBER=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "$TITLE in:title" --json number,title --jq "map(select(.title == \"$TITLE\")) | first | .number // \"\"")
           if [ -z "$NUMBER" ]; then
             echo "No open npm failure issue found"

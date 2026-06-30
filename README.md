@@ -4,7 +4,7 @@
 
 [![npm version](https://img.shields.io/npm/v/@leohenon/ocv?style=flat-square&logo=npm&logoColor=white)](https://www.npmjs.com/package/@leohenon/ocv) [![CI](https://img.shields.io/github/actions/workflow/status/leohenon/opencode-vim/ci.yml?branch=ocv&style=flat-square&logo=github&logoColor=white&label=CI)](https://github.com/leohenon/opencode-vim/actions/workflows/ci.yml) [![Upstream sync](https://img.shields.io/github/actions/workflow/status/leohenon/opencode-vim/sync-upstream.yml?branch=ocv&style=flat-square&logo=github&logoColor=white&label=upstream%20sync)](https://github.com/leohenon/opencode-vim/actions/workflows/sync-upstream.yml) [![Website](https://img.shields.io/badge/website-opencode--vim-7fa6a3?style=flat-square)](https://leohenon.github.io/opencode-vim/) [![Bun](https://img.shields.io/badge/runtime-Bun-f9f1e1?style=flat-square&logo=bun&logoColor=white)](https://bun.sh)
 
-OpenCode fork with vim mode. Syncs with upstream releases.
+Keyboard-first OpenCode with Vim controls across the TUI, kept in sync with upstream releases.
 
 </div>
 
@@ -43,7 +43,7 @@ brew upgrade ocv
 
 ## Features
 
-### Vim motions
+### Prompt controls
 
 Toggle via command palette > `Toggle vim mode`.
 
@@ -57,16 +57,17 @@ Toggle via command palette > `Toggle vim mode`.
 | Find / till                    | `f`, `F`, `t`, `T`, `;`, `,`                               |
 | Scroll                         | `Ctrl+e`, `Ctrl+y`, `Ctrl+d`, `Ctrl+u`, `Ctrl+f`, `Ctrl+b` |
 | Insert / replace               | `i`, `I`, `a`, `A`, `o`, `O`, `R`                          |
-| Character / line edit          | `r`, `x`, `~`, `s`, `S`, `J`, `C`, `dd`, `cc`              |
-| Word changes                   | `cw`, `cb`, `ciw`, `caw`, `ciW`, `caW`                     |
-| Word deletes                   | `dw`, `db`, `diw`, `daw`, `diW`, `daW`                     |
+| Character / line edit          | `r`, `x`, `~`, `s`, `S`, `J`, `C`, `D`, `dd`, `cc`         |
+| Word changes                   | `cw`, `cb`, `ce`, `cW`, `cE`, `ciw`, `caw`, `ciW`, `caW`   |
+| Word deletes                   | `dw`, `db`, `de`, `dW`, `dE`, `diw`, `daw`, `diW`, `daW`   |
 | Quote changes                  | `ci"`, `ca"`, `ci'`, `ca'`, ``ci` ``, ``ca` ``             |
 | Quote deletes                  | `di"`, `da"`, `di'`, `da'`, ``di` ``, ``da` ``             |
 | Bracket changes                | `ci(`, `ca(`, `ci[`, `ca[`, `ci{`, `ca{`, `ci<`, `ca<`     |
 | Bracket deletes                | `di(`, `da(`, `di[`, `da[`, `di{`, `da{`, `di<`, `da<`     |
 | Find / till operators          | `cf`, `cF`, `ct`, `cT`, `df`, `dF`, `dt`, `dT`             |
 | Matching / paragraph operators | `c%`, `d%`, `c}`, `c{`, `d}`, `d{`                         |
-| Line / word yanks              | `yy`, `yw`, `yiw`, `yaw`, `yiW`, `yaW`                     |
+| Line boundary operators        | `c0`, `c^`, `c$`, `d0`, `d^`, `d$`, `y0`, `y^`, `y$`       |
+| Line / word yanks              | `yy`, `yw`, `ye`, `yW`, `yE`, `yiw`, `yaw`, `yiW`, `yaW`   |
 | Quote yanks                    | `yi"`, `ya"`, `yi'`, `ya'`, ``yi` ``, ``ya` ``             |
 | Bracket yanks                  | `yi(`, `ya(`, `yi[`, `ya[`, `yi{`, `ya{`, `yi<`, `ya<`     |
 | Matching / paragraph yanks     | `y%`, `y}`, `y{`                                           |
@@ -81,7 +82,7 @@ Numeric count prefixes are supported for motions and common operators.
 > `<leader>y` copies the prompt selection when present; configure it with `keybinds.prompt_copy_selection`.
 > For clipboard sync, see [System clipboard register](#system-clipboard-register).
 
-### Copy Mode
+### Copy mode
 
 Text selection from the chat session view.
 
@@ -113,6 +114,20 @@ When in search mode, `Enter` submits the search, and `Escape` clears search high
 > [!TIP]
 > Configure the copy mode entry key with `keybinds.copy_mode`.
 
+### Dialog controls
+
+Searchable dialogs and custom question answer inputs use modal controls.
+
+| Area               | Controls                                                                |
+| ------------------ | ----------------------------------------------------------------------- |
+| Input mode         | `Escape` enters normal mode; `i`, `a`, `/`, `I`, `A` return to insert   |
+| Input editing      | `h`, `l`, `w`, `b`, `e`, `0`, `$` move within the input; `dd` clears it |
+| Searchable dialogs | `j`, `k`, `gg`, `G` move through dialog items                           |
+| Question dialogs   | `j`, `k` move through answers; `h`, `l` move between questions          |
+
+> [!TIP]
+> Disable modal dialog inputs with `vim_modal_input: false`.
+
 ### Minimal UI
 
 Hides extra UI hints and tips.
@@ -120,6 +135,19 @@ Hides extra UI hints and tips.
 Toggle via command palette > `Toggle minimal ui`.
 
 ## Configuration
+
+### Options
+
+| Option                          | Purpose                                  |
+| ------------------------------- | ---------------------------------------- |
+| `prompt_max_height`             | Set max prompt input height              |
+| `prompt_scrollbar`              | Show the prompt scrollbar                |
+| `vim_enter_submit`              | Submit with Enter from insert mode       |
+| `vim_insert_after_submit`       | Return to insert mode after submit       |
+| `vim_system_clipboard_register` | Use the system clipboard as Vim register |
+| `vim_modal_input`               | Enable Vim controls in dialogs           |
+| `vim_langmap`                   | Map non-English keys to Vim commands     |
+| `vim_escape_sequence`           | Use a two-key escape sequence like `jk`  |
 
 ### Prompt input height
 
@@ -190,7 +218,7 @@ Yank and delete operations sync to the system clipboard, `p` / `P` paste from it
 
 ### Modal dialog inputs
 
-Searchable dialog inputs and custom question answer inputs use modal controls. Disable them with:
+Disable modal controls in searchable dialogs and custom question answer inputs:
 
 ```json
 {
@@ -228,7 +256,7 @@ Set a two-character sequence to leave insert mode without pressing `Escape`:
 }
 ```
 
-## Neovim integration
+### Neovim integration
 
 Compatible with [`opencode.nvim`](https://github.com/nickjvandyke/opencode.nvim). Use the following server config:
 

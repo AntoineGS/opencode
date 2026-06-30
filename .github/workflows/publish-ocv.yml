@@ -64,7 +64,7 @@ jobs:
           fi
 
           git add README.md
-          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -m "docs: add release contributors"
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -m "chore: update contributors"
           git push origin HEAD:${{ github.ref_name }}
 
       - name: Build CLI

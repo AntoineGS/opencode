@@ -15,10 +15,12 @@ import { useTerminalDimensions } from "@opentui/solid"
 import * as fuzzysort from "fuzzysort"
 import { isDeepEqual } from "remeda"
 import { useDialog, type DialogContext } from "./dialog"
+import { createModalInputControls, type ModalInputKeyEvent, type ModalInputMode } from "./modal-input-controls"
 import { Locale } from "../util/locale"
 import { getScrollAcceleration } from "../util/scroll"
 import { useTuiConfig } from "../config"
 import { formatKeyBindings, useBindings, useKeymapSelector } from "../keymap"
+import { useVimEnabled } from "../component/vim"
 
 export interface DialogSelectProps<T> {
   title: string
@@ -36,6 +38,7 @@ export interface DialogSelectProps<T> {
   renderFilter?: boolean
   locked?: boolean
   preserveSelection?: boolean
+  modalInput?: boolean
   actions?: {
     command: string
     title: string
@@ -85,15 +88,18 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   const dialog = useDialog()
   const { theme } = useTheme()
   const tuiConfig = useTuiConfig()
+  const vimEnabled = useVimEnabled()
   const scrollAcceleration = createMemo(() => getScrollAcceleration(tuiConfig))
 
   const [store, setStore] = createStore({
     selected: 0,
     filter: "",
     input: "keyboard" as "keyboard" | "mouse",
+    inputMode: "insert" as ModalInputMode,
   })
   const [focusedAction, setFocusedAction] = createSignal<number>()
   const actionFocused = createMemo(() => focusedAction() !== undefined)
+  const modalInputEnabled = createMemo(() => vimEnabled() && props.renderFilter !== false && (props.modalInput ?? tuiConfig.vim_modal_input))
   let selection: { value: T; category?: string } | undefined
   let resetSelection = false
   let visibilityGeneration = 0
@@ -114,6 +120,54 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   )
 
   let input: InputRenderable
+  const modalInput = createModalInputControls({
+    mode: () => store.inputMode,
+    setMode: (mode) => setStore("inputMode", mode),
+    move: (direction) => {
+      setStore("input", "keyboard")
+      move(direction)
+    },
+    moveToStart: () => {
+      if (props.locked) return
+      setStore("input", "keyboard")
+      moveTo(0)
+    },
+    moveToEnd: () => {
+      if (props.locked) return
+      setStore("input", "keyboard")
+      moveTo(flat().length - 1)
+    },
+    focus: () => input?.focus(),
+    text: () => input?.plainText ?? "",
+    cursor: () => input?.cursorOffset ?? 0,
+    setCursor: (offset) => {
+      if (!input || input.isDestroyed) return
+      input.cursorOffset = offset
+    },
+    setText: (text) => {
+      if (!input || input.isDestroyed) return
+      input.setText(text)
+      setStore("filter", text)
+      props.onFilter?.(text)
+    },
+  })
+
+  createEffect(() => {
+    if (!input || input.isDestroyed) return
+    input.cursorStyle = modalInputEnabled() && store.inputMode === "normal" ? { style: "block", blinking: false } : { style: "line", blinking: true }
+  })
+
+  function enterNormalMode() {
+    modalInput.clearPending()
+    if (input && !input.isDestroyed) {
+      input.cursorOffset = normalCursor(input.plainText, input.cursorOffset)
+    }
+    setStore("inputMode", "normal")
+  }
+
+  function clearModalInputPending() {
+    if (modalInputEnabled()) modalInput.clearPending()
+  }
 
   const actions = createMemo(() => props.actions ?? [])
   const shownActions = createMemo(() => actions().filter((item) => !item.hidden))
@@ -288,6 +342,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   )
 
   function move(direction: number) {
+    clearModalInputPending()
     if (props.locked) return
     if (flat().length === 0) return
     let next = store.selected + direction
@@ -297,6 +352,8 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   }
 
   function moveTo(next: number, center = false, preserve = true) {
+    clearModalInputPending()
+    if (next < 0) return
     setFocusedAction(undefined)
     setStore("selected", next)
     const option = selected()
@@ -342,6 +399,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   }
 
   function submit() {
+    clearModalInputPending()
     if (props.locked) return
     setStore("input", "keyboard")
     const index = focusedAction()
@@ -356,6 +414,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   }
 
   function moveAction(direction: 1 | -1) {
+    clearModalInputPending()
     if (props.locked) return
     const total = actionItems().length
     if (total === 0) return
@@ -370,6 +429,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     const visible = shownActions()
 
     return {
+      priority: modalInputEnabled() ? 1 : undefined,
       commands: [
         {
           name: "dialog.select.prev",
@@ -438,6 +498,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           title: item.title,
           category: "Dialog",
           run() {
+            clearModalInputPending()
             if (props.locked) return
             if (isActionDisabled(item)) return
             setStore("input", "keyboard")
@@ -458,6 +519,16 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           "dialog.select.submit",
         ]),
         ...visible.flatMap((item) => tuiConfig.keybinds.get(item.command)),
+        ...(modalInputEnabled() && store.inputMode === "insert"
+          ? [
+              {
+                key: "escape",
+                desc: "Enter normal mode",
+                group: "Dialog",
+                cmd: () => enterNormalMode(),
+              },
+            ]
+          : []),
         ...(visible.length
           ? [
               {
@@ -501,6 +572,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   const right = createMemo(() => visibleActions().filter((item) => item.side === "right"))
 
   function triggerAction(item: VisibleAction | undefined) {
+    clearModalInputPending()
     if (props.locked) return
     if (!item || !isActionItem(item) || isActionDisabled(item)) return
     setStore("input", "keyboard")
@@ -568,8 +640,9 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           </text>
         </box>
         <Show when={props.renderFilter !== false}>
-          <box paddingTop={1}>
+          <box paddingTop={1} flexDirection="row" gap={1}>
             <input
+              flexGrow={1}
               onInput={(e) => {
                 if (props.locked) return
                 batch(() => {
@@ -577,9 +650,14 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                   props.onFilter?.(e)
                 })
               }}
+              onKeyDown={(event: ModalInputKeyEvent) => {
+                if (modalInputEnabled() && modalInput.handleKey(event)) return
+              }}
               focusedBackgroundColor={theme.backgroundPanel}
               cursorColor={theme.primary}
-              cursorStyle={{ style: "line", blinking: true }}
+              cursorStyle={
+                modalInputEnabled() && store.inputMode === "normal" ? { style: "block", blinking: false } : { style: "line", blinking: true }
+              }
               focusedTextColor={theme.textMuted}
               ref={(r) => {
                 input = r
@@ -727,6 +805,11 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
       </Show>
     </box>
   )
+}
+
+function normalCursor(text: string, cursor: number) {
+  if (text.length === 0) return 0
+  return Math.max(0, Math.min(cursor - 1, text.length - 1))
 }
 
 function Option(props: {

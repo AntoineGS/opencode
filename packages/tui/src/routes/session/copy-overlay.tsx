@@ -8,7 +8,12 @@ export type CopyPosition = {
   col: number
   visual: boolean
   cursorText: string
-  action?: { kind: "tool-toggle"; left: number; text: string }
+  rowHasText: boolean
+  action?: {
+    kind: "tool-toggle"
+    left: number
+    text: string
+  }
 }
 export type CopyContext = CopyRow & CopyPosition
 

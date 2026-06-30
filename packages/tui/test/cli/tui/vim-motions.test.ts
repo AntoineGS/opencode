@@ -164,6 +164,7 @@ function createHandler(
       rows?: Array<{ col: number }>
       isVisual?: boolean
       toggleCollapsed?: () => boolean
+      activate?: () => boolean
     }
     register?: {
       get?: () => { text: string; linewise: boolean } | null
@@ -231,6 +232,7 @@ function createHandler(
   let copyYankLines = 0
   let copyCopies = 0
   let copyToggleCollapseds = 0
+  let copyActivates = 0
   let copyExitVisuals = 0
   let copyExits = 0
   const copyExitArgs: Array<boolean | undefined> = []
@@ -460,6 +462,10 @@ function createHandler(
       copyToggleCollapseds++
       return options?.copy?.toggleCollapsed?.() ?? false
     },
+    copyActivate() {
+      copyActivates++
+      return options?.copy?.activate?.() ?? false
+    },
     copyIsVisual() {
       return copyVisual() !== undefined
     },
@@ -611,6 +617,7 @@ function createHandler(
     copyYankLines: () => copyYankLines,
     copyCopies: () => copyCopies,
     copyToggleCollapseds: () => copyToggleCollapseds,
+    copyActivates: () => copyActivates,
     copyExitVisuals: () => copyExitVisuals,
     copyExits: () => copyExits,
     copyExitArgs,
@@ -8008,6 +8015,270 @@ describe("copy mode", () => {
     expect(cm.prompt.yankLine()).toEqual({ text: "- [x] Push visual-fix", linewise: false })
   })
 
+  test("copy mode preserves inline tool child offsets", () => {
+    const icon = {
+      _x: 0,
+      _y: 0,
+      plainText: "✓",
+      lineInfo: {
+        lineSources: [0],
+        lineStartCols: [0],
+        lineWidthCols: [1],
+        lineWraps: [0],
+      },
+    }
+    const text = "Explore Task — Inspect spacing\n↳ 1 toolcall · 501ms"
+    const label = {
+      _x: 2,
+      _y: 0,
+      plainText: text,
+      lineInfo: {
+        lineSources: [0, 1],
+        lineStartCols: [0, 0],
+        lineWidthCols: text.split("\n").map((line) => Bun.stringWidth(line)),
+        lineWraps: [0, 0],
+      },
+    }
+    const child = {
+      id: "tool-tool-part",
+      y: 0,
+      height: 2,
+      getChildren: () => [icon, label],
+    }
+    const scroll = {
+      y: 0,
+      height: 10,
+      width: 120,
+      scrollHeight: 2,
+      getChildren: () => [child],
+      scrollBy() {},
+    } as unknown as ScrollBoxRenderable
+    const cm = createCopyMode({
+      scroll: () => scroll,
+      messages: () => [{ id: "message", role: "assistant" }],
+      parts: () => [{ id: "tool-part", type: "tool", tool: "task", state: { status: "completed" } }] as Part[],
+      thinking: () => false,
+      details: () => true,
+      session: () => "session",
+      toBottom() {},
+    })
+
+    cm.prompt.enter()
+    cm.prompt.jump("top")
+
+    expect(cm.prompt.text()).toBe("   ✓ Explore Task — Inspect spacing")
+    expect(cm.cursorText()).toBe("✓")
+    expect(cm.action()).toBeUndefined()
+    cm.prompt.move("down")
+    expect(cm.prompt.text()).toBe("     ↳ 1 toolcall · 501ms")
+    expect(cm.cursorText()).toBe("↳")
+    expect(cm.action()).toBeUndefined()
+    expect(cm.prompt.yankLine()).toEqual({ text: "↳ 1 toolcall · 501ms", linewise: false })
+  })
+
+  test("copy mode preserves running task spinner offset", () => {
+    const text = "Explore Task — Inspect spacing\n↳ Grep something"
+    const child = {
+      id: "tool-part",
+      y: 0,
+      height: 2,
+      getChildren: () => [
+        {
+          _x: 0,
+          _y: 0,
+          plainText: text,
+          lineInfo: {
+            lineSources: [0, 1],
+            lineStartCols: [0, 0],
+            lineWidthCols: text.split("\n").map((line) => Bun.stringWidth(line)),
+            lineWraps: [0, 0],
+          },
+        },
+      ],
+    }
+    const scroll = {
+      y: 0,
+      height: 10,
+      width: 120,
+      scrollHeight: 2,
+      getChildren: () => [child],
+      scrollBy() {},
+    } as unknown as ScrollBoxRenderable
+    const cm = createCopyMode({
+      scroll: () => scroll,
+      messages: () => [{ id: "message", role: "assistant" }],
+      parts: () => [{ id: "part", type: "tool", tool: "task", state: { status: "running" } }] as Part[],
+      thinking: () => false,
+      details: () => true,
+      session: () => "session",
+      toBottom() {},
+    })
+
+    cm.prompt.enter()
+    cm.prompt.jump("top")
+
+    expect(cm.prompt.text()).toBe("     Explore Task — Inspect spacing")
+    expect(cm.cursorText()).toBe("E")
+    expect(cm.prompt.yankLine()).toEqual({ text: "Explore Task — Inspect spacing", linewise: false })
+    cm.prompt.move("down")
+    expect(cm.prompt.text()).toBe("     ↳ Grep something")
+    expect(cm.cursorText()).toBe("↳")
+  })
+
+  test("copy mode strips fallback task spinner while preserving offset", () => {
+    const text = "⋯ Explore Task — Inspect spacing\n↳ Grep something"
+    const child = {
+      id: "tool-part",
+      y: 0,
+      height: 2,
+      getChildren: () => [
+        {
+          _x: 0,
+          _y: 0,
+          plainText: text,
+          lineInfo: {
+            lineSources: [0, 1],
+            lineStartCols: [0, 0],
+            lineWidthCols: text.split("\n").map((line) => Bun.stringWidth(line)),
+            lineWraps: [0, 0],
+          },
+        },
+      ],
+    }
+    const scroll = {
+      y: 0,
+      height: 10,
+      width: 120,
+      scrollHeight: 2,
+      getChildren: () => [child],
+      scrollBy() {},
+    } as unknown as ScrollBoxRenderable
+    const cm = createCopyMode({
+      scroll: () => scroll,
+      messages: () => [{ id: "message", role: "assistant" }],
+      parts: () => [{ id: "part", type: "tool", tool: "task", state: { status: "running" } }] as Part[],
+      thinking: () => false,
+      details: () => true,
+      session: () => "session",
+      toBottom() {},
+    })
+
+    cm.prompt.enter()
+    cm.prompt.jump("top")
+
+    expect(cm.prompt.text()).toBe("     Explore Task — Inspect spacing")
+    expect(cm.cursorText()).toBe("E")
+    expect(cm.prompt.yankLine()).toEqual({ text: "Explore Task — Inspect spacing", linewise: false })
+    cm.prompt.move("down")
+    expect(cm.prompt.text()).toBe("     ↳ Grep something")
+    expect(cm.cursorText()).toBe("↳")
+  })
+
+  test("copy mode activates current row", () => {
+    const child = {
+      id: "tool-part",
+      y: 0,
+      height: 1,
+      getChildren: () => [
+        {
+          _y: 0,
+          plainText: "✓ Explore Task — Inspect spacing",
+          lineInfo: {
+            lineSources: [0],
+            lineStartCols: [0],
+            lineWidthCols: [35],
+            lineWraps: [0],
+          },
+        },
+      ],
+    }
+    const scroll = {
+      y: 0,
+      height: 10,
+      width: 120,
+      scrollHeight: 1,
+      getChildren: () => [child],
+      scrollBy() {},
+    } as unknown as ScrollBoxRenderable
+    let activated: unknown
+    const cm = createCopyMode({
+      scroll: () => scroll,
+      messages: () => [{ id: "message", role: "assistant" }],
+      parts: () => [{ id: "part", type: "tool", tool: "task", state: { status: "completed" } }] as Part[],
+      thinking: () => false,
+      details: () => true,
+      session: () => "session",
+      toBottom() {},
+      activate(row) {
+        activated = row
+        return true
+      },
+    })
+
+    cm.prompt.enter()
+    cm.prompt.jump("top")
+
+    expect(cm.action()).toBeUndefined()
+    expect(cm.prompt.activate()).toBe(true)
+    expect(activated).toMatchObject({ kind: "tool", tool: "task", part: "part" })
+  })
+
+  test("copy mode does not activate blank task rows", () => {
+    const child = {
+      id: "tool-part",
+      y: 0,
+      height: 2,
+      getChildren: () => [
+        {
+          _y: 1,
+          plainText: "✓ Explore Task — Inspect spacing",
+          lineInfo: {
+            lineSources: [0],
+            lineStartCols: [0],
+            lineWidthCols: [35],
+            lineWraps: [0],
+          },
+        },
+      ],
+    }
+    const scroll = {
+      y: 0,
+      height: 10,
+      width: 120,
+      scrollHeight: 2,
+      getChildren: () => [child],
+      scrollBy() {},
+    } as unknown as ScrollBoxRenderable
+    let activations = 0
+    const cm = createCopyMode({
+      scroll: () => scroll,
+      messages: () => [{ id: "message", role: "assistant" }],
+      parts: () => [{ id: "part", type: "tool", tool: "task", state: { status: "completed" } }] as Part[],
+      thinking: () => false,
+      details: () => true,
+      session: () => "session",
+      toBottom() {},
+      activate() {
+        activations++
+        return true
+      },
+    })
+
+    cm.prompt.enter()
+    cm.prompt.jump("top")
+
+    expect(cm.prompt.text()).toBe("   ")
+    expect(cm.cursorText()).toBe(" ")
+    expect(cm.prompt.activate()).toBe(false)
+    expect(activations).toBe(0)
+
+    cm.prompt.move("down")
+    expect(cm.prompt.text()).toBe("   ✓ Explore Task — Inspect spacing")
+    expect(cm.cursorText()).toBe("✓")
+    expect(cm.prompt.activate()).toBe(true)
+    expect(activations).toBe(1)
+  })
+
   test("copy mode cursor starts on restored markdown list marker", () => {
     const line = "If you launched OpenCode"
     const leaf = {
@@ -9744,6 +10015,19 @@ describe("copy mode", () => {
     expect(ctx.copyExits()).toBe(1)
     expect(ctx.copyExitPreserveScrolls()).toBe(0)
     expect(ctx.state.mode()).toBe("normal")
+  })
+
+  test("return activates copy rows before copying", () => {
+    const ctx = createHandler("abc", { mode: "copy", copy: { activate: () => true } })
+
+    const evt = createEvent("return")
+    expect(ctx.handler.handleKey(evt.event)).toBe(true)
+    expect(evt.prevented()).toBe(true)
+    expect(ctx.copyToggleCollapseds()).toBe(1)
+    expect(ctx.copyActivates()).toBe(1)
+    expect(ctx.copyCopies()).toBe(0)
+    expect(ctx.copyExitPreserveScrolls()).toBe(0)
+    expect(ctx.state.mode()).toBe("copy")
   })
 
   test("shift+return copies instead of toggling collapsed tool output", () => {

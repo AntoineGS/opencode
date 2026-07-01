@@ -25,11 +25,32 @@ jobs:
 
       - name: Merge upstream/dev
         run: |
+          set -euo pipefail
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git remote add upstream https://github.com/sst/opencode.git
           git fetch upstream dev
-          git merge --no-edit upstream/dev
+
+          if ! git merge --no-commit --no-ff upstream/dev; then
+            conflicts=$(git diff --name-only --diff-filter=U)
+            other_conflicts=$(printf '%s\n' "$conflicts" | grep -vx 'AGENTS.md' || true)
+
+            if [ -n "$other_conflicts" ]; then
+              printf '%s\n' "$other_conflicts"
+              exit 1
+            fi
+          fi
+
+          if git ls-files --error-unmatch AGENTS.md >/dev/null 2>&1; then
+            git rm -f AGENTS.md
+          fi
+
+          if git rev-parse -q --verify MERGE_HEAD >/dev/null; then
+            git commit --no-edit
+          elif ! git diff --cached --quiet; then
+            git commit -m "chore: remove upstream agents file"
+          fi
 
       - name: Bump ocv track for ocv PRs
         env:

@@ -88,24 +88,24 @@ Text selection from the chat session view.
 
 > Copy mode collapses code diffs into a single column for easy copying.
 
-| Keys                           | Action                                                        |
-| ------------------------------ | ------------------------------------------------------------- |
-| `<leader>v`, `Ctrl+W k`        | Enter copy mode                                               |
-| `h`, `j`, `k`, `l`, arrow keys | Navigate                                                      |
-| `v`, `V`, `Ctrl+V`             | Start character-wise, line-wise, or block selection           |
-| `y`, `yy`                      | Yank to the vim register                                      |
+| Keys                           | Action                                                                                        |
+| ------------------------------ | --------------------------------------------------------------------------------------------- |
+| `<leader>v`, `Ctrl+W k`        | Enter copy mode                                                                               |
+| `h`, `j`, `k`, `l`, arrow keys | Navigate                                                                                      |
+| `v`, `V`, `Ctrl+V`             | Start character-wise, line-wise, or block selection                                           |
+| `y`, `yy`                      | Yank to the vim register                                                                      |
 | `Enter`                        | Copy to the system clipboard, toggle expandable tool output, or open a selected subagent task |
-| `Y`                            | Yank to the vim register and scroll to the bottom             |
-| `Shift+Enter`                  | Copy to the system clipboard and scroll to the bottom         |
-| `Escape`                       | Exit visual mode                                              |
-| `q`                            | Exit copy mode and scroll to the bottom                       |
-| `Ctrl+W j`                     | Exit copy mode without scrolling                              |
-| `Ctrl+W w`                     | Toggle copy mode                                              |
-| `i`                            | Focus the prompt input in insert mode without scrolling       |
-| `z`, `zt`, `zz`, `zb`          | Adjust copy-mode scroll positioning                           |
-| `H`, `M`, `L`                  | Jump to the top, middle, or bottom of the viewport            |
-| `/`, `?`                       | Search forward or backward in chat history                    |
-| `n`, `N`                       | Repeat search in the same or opposite direction               |
+| `Y`                            | Yank to the vim register and scroll to the bottom                                             |
+| `Shift+Enter`                  | Copy to the system clipboard and scroll to the bottom                                         |
+| `Escape`                       | Exit visual mode                                                                              |
+| `q`                            | Exit copy mode and scroll to the bottom                                                       |
+| `Ctrl+W j`                     | Exit copy mode without scrolling                                                              |
+| `Ctrl+W w`                     | Toggle copy mode                                                                              |
+| `i`                            | Focus the prompt input in insert mode without scrolling                                       |
+| `z`, `zt`, `zz`, `zb`          | Adjust copy-mode scroll positioning                                                           |
+| `H`, `M`, `L`                  | Jump to the top, middle, or bottom of the viewport                                            |
+| `/`, `?`                       | Search forward or backward in chat history                                                    |
+| `n`, `N`                       | Repeat search in the same or opposite direction                                               |
 
 When in search mode, `Enter` submits the search, and `Escape` clears search highlights before exiting copy mode.
 
@@ -276,7 +276,5 @@ vim.g.opencode_opts = {
 ```
 
 ## Contributors
-
-Thanks to everyone who contributed.
 
 <a href="https://github.com/reobin"><img src="https://github.com/reobin.png" width="40" height="40" /></a> <a href="https://github.com/BrettKulp"><img src="https://github.com/BrettKulp.png" width="40" height="40" /></a> <a href="https://github.com/lamiphil"><img src="https://github.com/lamiphil.png" width="40" height="40" /></a> <a href="https://github.com/XPhyro"><img src="https://github.com/XPhyro.png" width="40" height="40" /></a> <a href="https://github.com/shaheislam"><img src="https://github.com/shaheislam.png" width="40" height="40" /></a> <a href="https://github.com/semi710"><img src="https://github.com/semi710.png" width="40" height="40" /></a>

@@ -22,6 +22,8 @@ import {
   insertLineStart,
   joinLines,
   lineBeginningOperation,
+  lineEnd as lineEndOffset,
+  lineStart as lineStartOffset,
   matchingBracketOperation,
   matchingBracketTarget,
   moveBigWordEnd,
@@ -68,6 +70,7 @@ import {
   wordTextObjectOperation,
   yankSelection,
 } from "./vim-motions"
+import { applyLangmap } from "./vim-langmap"
 
 export type VimEvent = {
   name?: string
@@ -231,19 +234,7 @@ export function createVimHandler(input: {
   function langmapped(event: VimEvent) {
     if (hasModifier(event)) return event
     if (["r", "vr", "f", "F", "t", "T"].includes(input.state.pending())) return event
-    const key = vimLangmapKeyName(event)
-    if (key.length !== 1) return event
-    const langmap = input.langmap?.()
-    const mapped = langmap?.[key] ?? (event.shift ? langmap?.[key.toLowerCase()]?.toUpperCase() : undefined)
-    if (!mapped || mapped.length !== 1) return event
-    return {
-      ...event,
-      name: mapped,
-      sequence: mapped,
-      raw: mapped,
-      shift: /[A-Z]/.test(mapped),
-      preventDefault: () => event.preventDefault(),
-    }
+    return applyLangmap(event, vimLangmapKeyName(event), input.langmap?.())
   }
 
   function isShifted(event: VimEvent, key: string) {
@@ -314,17 +305,6 @@ export function createVimHandler(input: {
     input.state.setPending(operation)
     event.preventDefault()
     return true
-  }
-
-  function lineStartOffset(text: string, offset: number) {
-    if (offset <= 0) return 0
-    const index = text.lastIndexOf("\n", offset - 1)
-    return index === -1 ? 0 : index + 1
-  }
-
-  function lineEndOffset(text: string, offset: number) {
-    const index = text.indexOf("\n", offset)
-    return index === -1 ? text.length : index
   }
 
   function lineStartForCount(text: string, offset: number, count: number) {

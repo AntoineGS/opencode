@@ -2,7 +2,7 @@
 
 PRs welcome. Open an issue first for large changes.
 
-ocv tracks OpenCode. Keep changes focused on Vim mode/copy mode.
+`ocv` tracks OpenCode. Keep changes focused on Vim mode/copy mode.
 
 ## Commit messages
 

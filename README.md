@@ -271,7 +271,9 @@ Set a two-character sequence to leave insert mode without pressing `Escape`:
 
 ### Neovim integration
 
-Compatible with [`opencode.nvim`](https://github.com/nickjvandyke/opencode.nvim). Use the following server config:
+[`opencode.nvim`](https://github.com/nickjvandyke/opencode.nvim) works well with `ocv`.
+
+Configure `opencode.nvim` to launch `ocv`:
 
 ```lua
 local ocv_cmd = "bash -c 'exec -a opencode ocv --port'"

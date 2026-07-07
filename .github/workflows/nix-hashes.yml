@@ -146,7 +146,7 @@ jobs:
           fi
 
           git add "$HASH_FILE"
-          git commit -m "chore: update nix node_modules hashes"
+          git commit -m "chore(deps): update nix node_modules hashes"
           git push origin HEAD:"$GITHUB_REF_NAME"
 
           echo "### Nix hashes" >> "$GITHUB_STEP_SUMMARY"

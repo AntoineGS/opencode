@@ -46,6 +46,12 @@ jobs:
               exit 1
             fi
 
+            if printf '%s\n' "$conflicts" | grep -qx 'AGENTS.md'; then
+              echo "Resolving AGENTS.md with OCV instructions."
+              git checkout --ours -- AGENTS.md
+              git add AGENTS.md
+            fi
+
             if printf '%s\n' "$conflicts" | grep -qx 'nix/hashes.json'; then
               tmp=$(mktemp -d)
               git show :2:nix/hashes.json > "$tmp/ours.json"
@@ -76,8 +82,10 @@ jobs:
             fi
           fi
 
-          if git ls-files --error-unmatch AGENTS.md >/dev/null 2>&1; then
-            git rm -f AGENTS.md
+          if git rev-parse -q --verify MERGE_HEAD >/dev/null && git cat-file -e HEAD:AGENTS.md 2>/dev/null; then
+            echo "Keeping OCV AGENTS.md and ignoring upstream changes."
+            git checkout HEAD -- AGENTS.md
+            git add AGENTS.md
           fi
 
           remaining_conflicts=$(git diff --name-only --diff-filter=U)
@@ -87,9 +95,7 @@ jobs:
           fi
 
           if git rev-parse -q --verify MERGE_HEAD >/dev/null; then
-            git commit --no-edit
-          elif ! git diff --cached --quiet; then
-            git commit -m "chore: remove upstream agents file"
+            git commit -m "chore(upstream): sync upstream dev"
           fi
 
           after=$(git rev-parse HEAD)
@@ -157,7 +163,7 @@ jobs:
           next="${track%.*}.$((10#${track#*.} + 1))"
           printf '%s\n' "$next" > .github/ocv-track
           git add .github/ocv-track
-          git commit -m "chore: bump ocv-track"
+          git commit -m "chore(release): bump ocv track"
           echo "Bumped ocv track from $track to $next for ocv PRs merged since $previous:"
           cat "$prs"
 

@@ -194,7 +194,7 @@ jobs:
           fi
 
           git add "$HASH_FILE"
-          git commit -m "chore: update nix node_modules hashes"
+          git commit -m "chore(deps): update nix node_modules hashes"
           git push origin HEAD:"$BRANCH"
           git rev-parse HEAD > final-sha.txt
 
@@ -245,7 +245,7 @@ jobs:
           fi
 
           git add README.md
-          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -m "chore: update contributors"
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -m "chore(release): update contributors"
           git push origin HEAD:${{ github.ref_name }}
 
       - name: Build CLI
@@ -425,7 +425,7 @@ jobs:
             echo "Formula unchanged, skipping push"
             exit 0
           fi
-          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -m "Update ocv formula v${{ inputs.version }}"
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -m "chore(release): update ocv formula v${{ inputs.version }}"
           git push
 
       - name: Close Homebrew failure issues

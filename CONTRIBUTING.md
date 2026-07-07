@@ -1,8 +1,36 @@
 # Contributing
 
-PRs welcome. Open an issue first for large changes, or new features.
+PRs welcome. Open an issue first for large changes.
 
-ocv tracks OpenCode. Keep fork-specific changes focused on Vim mode/copy mode.
+ocv tracks OpenCode. Keep changes focused on Vim mode/copy mode.
+
+## Commit messages
+
+```text
+type(scope): summary
+```
+
+Types:
+
+- `feat`
+- `fix`
+- `refactor`
+- `test`
+- `docs`
+- `ci`
+- `chore`
+
+Preferred scopes:
+
+- `copy`
+- `prompt`
+- `tui`
+- `config`
+- `keymap`
+- `vim`
+- `upstream`
+- `deps`
+- `release`
 
 ## Development
 

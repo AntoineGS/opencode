@@ -30,8 +30,10 @@ Adds missing merged PR authors to README.md's Contributors section.`)
 }
 
 const botLogins = new Set(["actions-user", "github-actions[bot]", "opencode", "opencode-agent[bot]"])
+const repoOwner = values.repo?.split("/")[0]?.toLowerCase()
 const team = new Set([
   ...botLogins,
+  ...(repoOwner ? [repoOwner] : []),
   ...(await Bun.file(values.team!)
     .text()
     .catch(() => "")
@@ -43,11 +45,14 @@ const commits = await $`git log --first-parent --reverse --format=%H ${`${values
 const authors = new Map<string, number>()
 
 for (const sha of commits.split("\n").filter(Boolean)) {
-  const pulls = await $`gh api ${`repos/${values.repo}/commits/${sha}/pulls`}`
-    .json()
-    .catch(() => [] as Pull[])
+  let pulls: Pull[]
+  try {
+    pulls = (await $`gh api ${`repos/${values.repo}/commits/${sha}/pulls`}`.json()) as Pull[]
+  } catch (err) {
+    throw new Error(`Failed to load pull requests for commit ${sha}: ${err}`)
+  }
 
-  for (const pull of pulls as Pull[]) {
+  for (const pull of pulls) {
     const login = pull.user?.login
     if (!login) continue
     if (pull.base?.ref !== values.base) continue
@@ -81,20 +86,25 @@ function addContributors(readme: string, logins: string[]) {
 
   const thanks = "Thanks to everyone who contributed."
   const thanksIndex = readme.indexOf(thanks, headingIndex)
-  if (thanksIndex === -1) throw new Error(`${values.readme} is missing contributors intro text`)
+  const contentAnchor =
+    thanksIndex === -1 ? readme.indexOf("\n", headingIndex + heading.length) : thanksIndex + thanks.length
+  if (contentAnchor === -1) throw new Error(`${values.readme} has an invalid Contributors section`)
 
-  const contentStart = readme.indexOf("\n\n", thanksIndex + thanks.length)
+  const contentStart = readme.indexOf("\n\n", contentAnchor)
   if (contentStart === -1) throw new Error(`${values.readme} has an invalid Contributors section`)
 
   const start = contentStart + 2
-  const nextHeading = readme.slice(start).search(/\n## /)
-  const end = nextHeading === -1 ? readme.length : start + nextHeading
-  const current = readme.slice(start, end).trimEnd()
+  const rest = readme.slice(start)
+  const nextHeading = rest.match(/(^|\n)## /)
+  const headingStart = nextHeading?.index === undefined ? undefined : nextHeading.index + nextHeading[1].length
+  const end = headingStart === undefined ? readme.length : start + headingStart
+  const suffix = readme.slice(end)
+  const current = readme.slice(start, end).trim()
   const avatars = logins.map(
     (login) => `<a href="https://github.com/${login}"><img src="https://github.com/${login}.png" width="40" height="40" /></a>`,
   )
   const next = current ? `${current} ${avatars.join(" ")}` : avatars.join(" ")
-  return readme.slice(0, start) + next + (readme.slice(end) || (readme.endsWith("\n") ? "\n" : ""))
+  return readme.slice(0, start) + next + (suffix ? `\n\n${suffix}` : readme.endsWith("\n") ? "\n" : "")
 }
 
 function escapeRegExp(value: string) {

@@ -830,9 +830,8 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       },
       {
         name: "vim.q",
-        title: ":q",
+        title: "Quit",
         slashName: "q",
-        desc: "quit",
         run: () => exit(),
         category: "System",
       },

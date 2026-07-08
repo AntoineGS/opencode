@@ -180,23 +180,54 @@ jobs:
 
           BRANCH="${{ needs.prepare.outputs.branch }}"
           PREPARED_SHA="${{ needs.prepare.outputs.sha }}"
-          git fetch origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
-          if [ "$(git rev-parse "origin/$BRANCH")" != "$PREPARED_SHA" ]; then
-            echo "::error::Branch $BRANCH moved while preparing Nix hashes"
-            exit 1
-          fi
-
           HASH_FILE="nix/hashes.json"
-          if [ -z "$(git status --short -- "$HASH_FILE")" ]; then
-            echo "No Nix hash changes to commit"
-            echo "$PREPARED_SHA" > final-sha.txt
-            exit 0
-          fi
 
-          git add "$HASH_FILE"
-          git commit -m "chore(deps): update nix node_modules hashes"
-          git push origin HEAD:"$BRANCH"
-          git rev-parse HEAD > final-sha.txt
+          for attempt in 1 2 3; do
+            git fetch origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
+            REMOTE_SHA="$(git rev-parse "origin/$BRANCH")"
+
+            if [ "$REMOTE_SHA" != "$PREPARED_SHA" ]; then
+              # The branch advanced while we were computing hashes. It is only
+              # safe to continue if the hash inputs are unchanged (e.g. a
+              # concurrent nix/hashes.json commit); otherwise our hashes are
+              # stale and a fresh release must recompute them.
+              if ! git diff --quiet "$PREPARED_SHA" "$REMOTE_SHA" -- \
+                bun.lock \
+                package.json \
+                'packages/*/package.json' \
+                flake.lock \
+                nix/node_modules.nix \
+                nix/scripts \
+                patches; then
+                echo "::error::Hash inputs changed on $BRANCH while preparing; rerun the release"
+                exit 1
+              fi
+              # Re-anchor onto the advanced branch before re-applying hashes.
+              git checkout -f -B "$BRANCH" "$REMOTE_SHA"
+            fi
+
+            # Re-apply the freshly computed hashes from the downloaded artifacts.
+            nix/scripts/update-node-modules-hashes-json.sh
+
+            if [ -z "$(git status --short -- "$HASH_FILE")" ]; then
+              echo "Nix hashes already current on $BRANCH"
+              git rev-parse HEAD > final-sha.txt
+              exit 0
+            fi
+
+            git add "$HASH_FILE"
+            git commit -m "chore(deps): update nix node_modules hashes"
+            if git push origin HEAD:"$BRANCH"; then
+              git rev-parse HEAD > final-sha.txt
+              exit 0
+            fi
+
+            echo "Push race on $BRANCH; retrying (attempt $attempt)..."
+            git reset --hard "$REMOTE_SHA"
+          done
+
+          echo "::error::Failed to push Nix hashes after multiple attempts"
+          exit 1
 
       - name: Set final release SHA
         id: final

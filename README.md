@@ -153,26 +153,16 @@ Toggle via command palette > `Toggle minimal ui`.
 
 ### Mode-scoped keybinds
 
-Bind existing commands only in normal mode by nesting overrides under `vim.normal`:
+Bind existing commands only in normal mode by nesting overrides under `vim.normal`.
+
+For example, use `<space>` as the leader:
 
 ```json
 {
-  // Scroll with plain j/k
   "keybinds": {
     "vim.normal": {
-      "messages_line_down": "j",
-      "messages_line_up": "k"
-    }
-  }
-}
-```
-
-```json
-{
-  // Use <space> as leader
-  "keybinds": {
-    "vim.normal": {
-      "leader": "space"
+      "leader": "space",
+      "session_list": "<leader>s"
     }
   }
 }

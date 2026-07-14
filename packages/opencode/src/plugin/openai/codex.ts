@@ -294,9 +294,11 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
         return Object.fromEntries(
           Object.entries(provider.models)
             .filter(([modelID, model]) => {
-              if (modelID.includes("codex")) return true
+              if (model.options.reasoningMode === "pro") return false
               if (ALLOWED_MODELS.has(model.api.id)) return true
               if (DISALLOWED_MODELS.has(model.api.id)) return false
+              if (model.api.id === "gpt-5.6") return false
+              if (modelID.includes("codex")) return true
               const match = model.api.id.match(/^gpt-(\d+\.\d+)/)
               return match ? parseFloat(match[1]) > 5.4 : false
             })
@@ -315,7 +317,13 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
                       input: 272_000,
                       output: 128_000,
                     }
-                  : model.limit,
+                  : model.id.includes("gpt-5.6")
+                    ? {
+                        context: 500_000,
+                        input: 372_000,
+                        output: 128_000,
+                      }
+                    : model.limit,
               },
             ]),
         )
@@ -422,6 +430,7 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
 
             const requestInit = {
               ...init,
+              body: init?.body,
               headers,
             }
             if (websocketFetch && parsed.pathname.endsWith("/responses")) return websocketFetch(url, requestInit)

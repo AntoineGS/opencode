@@ -24,7 +24,8 @@ import {
   Show,
   on,
 } from "solid-js"
-import { TuiPathsProvider, TuiStartupProvider, TuiTerminalEnvironmentProvider, useTuiStartup } from "./context/runtime"
+import { TuiPathsProvider, TuiStartupProvider, TuiTerminalEnvironmentProvider } from "./context/runtime"
+import { createPasteSummaryEnabled, resolveSkipInitialLoading } from "./app-state"
 import { DialogProvider, useDialog } from "./ui/dialog"
 import { DialogProvider as DialogProviderList } from "./component/dialog-provider"
 import { ErrorComponent } from "./component/error-component"
@@ -278,7 +279,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                       <TuiStartupProvider
                         value={{
                           initialRoute: process.env.OPENCODE_ROUTE ? JSON.parse(process.env.OPENCODE_ROUTE) : undefined,
-                          skipInitialLoading: Boolean(process.env.OPENCODE_FAST_BOOT),
+                          skipInitialLoading: resolveSkipInitialLoading(process.env.OPENCODE_NO_FAST_BOOT),
                         }}
                       >
                         <ClipboardProvider>
@@ -366,7 +367,6 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
 })
 
 function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPluginHost }) {
-  const startup = useTuiStartup()
   const tuiConfig = useTuiConfig()
   const route = useRoute()
   const dimensions = useTerminalDimensions()
@@ -407,7 +407,8 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       Slot: pluginRuntime.Slot,
     }),
   )
-  const [ready, setReady] = createSignal(false)
+  const [pluginReady, setPluginReady] = createSignal(false)
+  const startupReady = createMemo(() => pluginReady() && sync.status === "complete")
   props.pluginHost
     .start({
       api,
@@ -419,7 +420,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       console.error("Failed to load TUI plugins", error)
     })
     .finally(() => {
-      setReady(true)
+      setPluginReady(true)
     })
   const vim = useVimEnabled()
 
@@ -449,8 +450,9 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     renderer.clearSelection()
   }
   const [terminalTitleEnabled, setTerminalTitleEnabled] = createSignal(kv.get("terminal_title_enabled", true))
-  const [pasteSummaryEnabled, setPasteSummaryEnabled] = createSignal(
-    kv.get("paste_summary_enabled", !sync.data.config.experimental?.disable_paste_summary),
+  const pasteSummaryEnabled = createPasteSummaryEnabled(
+    () => kv.get("paste_summary_enabled"),
+    () => sync.data.config.experimental?.disable_paste_summary,
   )
 
   // Update terminal window title based on current route and session
@@ -952,11 +954,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         title: pasteSummaryEnabled() ? "Disable paste summary" : "Enable paste summary",
         category: "System",
         run: () => {
-          setPasteSummaryEnabled((prev) => {
-            const next = !prev
-            kv.set("paste_summary_enabled", next)
-            return next
-          })
+          kv.set("paste_summary_enabled", !pasteSummaryEnabled())
           dialog.clear()
         },
       },
@@ -1106,7 +1104,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   })
 
   const plugin = createMemo(() => {
-    if (!ready()) return
+    if (!pluginReady()) return
     if (route.data.type !== "plugin") return
     const render = pluginRuntime.routes.get(route.data.id)
     if (!render) return <PluginRouteMissing id={route.data.id} onHome={() => route.navigate({ type: "home" })} />
@@ -1136,7 +1134,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       <Show when={Flag.OPENCODE_SHOW_TTFD}>
         <TimeToFirstDraw />
       </Show>
-      <Show when={ready()}>
+      <Show when={pluginReady()}>
         <box flexGrow={1} minHeight={0} flexDirection="column">
           <Switch>
             <Match when={route.data.type === "home"}>
@@ -1155,9 +1153,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         </box>
         <pluginRuntime.Slot name="app" />
       </Show>
-      <Show when={!startup.skipInitialLoading}>
-        <StartupLoading ready={ready} />
-      </Show>
+      <StartupLoading pluginsReady={pluginReady} ready={startupReady} />
     </box>
   )
 }

@@ -24,6 +24,10 @@ yay -S opencode-vim-bin
 
 Curl installs to `~/.ocv/bin`. Set `OCV_INSTALL_DIR` to install elsewhere.
 
+The TUI renders before background synchronization completes. Set
+`OPENCODE_NO_FAST_BOOT=1` to restore the initial synchronization gate when
+diagnosing startup or plugin issues.
+
 ## Usage
 
 ```bash

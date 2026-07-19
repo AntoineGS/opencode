@@ -1762,9 +1762,9 @@ export function Prompt(props: PromptProps) {
   })
 
   const agentMetaAlpha = createFadeIn(() => !!local.agent.current(), animationsEnabled)
-  const modelMetaAlpha = createFadeIn(() => !!local.agent.current() && store.mode === "normal", animationsEnabled)
+  const modelMetaAlpha = createFadeIn(() => !!local.model.current() && store.mode === "normal", animationsEnabled)
   const variantMetaAlpha = createFadeIn(
-    () => !!local.agent.current() && store.mode === "normal" && showVariant(),
+    () => !!local.model.current() && store.mode === "normal" && showVariant(),
     animationsEnabled,
   )
   const borderHighlight = createMemo(() => tint(theme.border, highlight(), agentMetaAlpha()))
@@ -2045,18 +2045,25 @@ export function Prompt(props: PromptProps) {
 
             <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1} justifyContent="space-between">
               <box flexDirection="row" gap={1}>
-                <Show when={local.agent.current()} fallback={<box height={1} />}>
-                  {(agent) => (
-                    <>
-                      <text fg={fadeColor(highlight(), agentMetaAlpha())}>
-                        {store.mode === "shell" ? "Shell" : Locale.titlecase(agent().name)}
-                      </text>
-                      <Show when={store.mode === "normal" && local.permission.mode === "auto"}>
-                        <text fg={fadeColor(theme.textMuted, agentMetaAlpha())}>auto</text>
+                <Show
+                  when={store.mode === "shell"}
+                  fallback={
+                    <Show when={!!local.agent.current() || !!local.model.current()} fallback={<box height={1} />}>
+                      <Show when={local.agent.current()}>
+                        {(agent) => (
+                          <>
+                            <text fg={fadeColor(highlight(), agentMetaAlpha())}>{Locale.titlecase(agent().name)}</text>
+                            <Show when={local.permission.mode === "auto"}>
+                              <text fg={fadeColor(theme.textMuted, agentMetaAlpha())}>auto</text>
+                            </Show>
+                          </>
+                        )}
                       </Show>
-                      <Show when={store.mode === "normal"}>
+                      <Show when={local.model.current()}>
                         <box flexDirection="row" gap={1}>
-                          <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>·</text>
+                          <Show when={local.agent.current()}>
+                            <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>·</text>
+                          </Show>
                           <text
                             flexShrink={0}
 
@@ -2076,8 +2083,10 @@ export function Prompt(props: PromptProps) {
                           </Show>
                         </box>
                       </Show>
-                    </>
-                  )}
+                    </Show>
+                  }
+                >
+                  <text fg={fadeColor(highlight(), agentMetaAlpha())}>Shell</text>
                 </Show>
               </box>
               <Show when={hasRightContent()}>

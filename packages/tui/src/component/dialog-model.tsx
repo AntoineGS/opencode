@@ -9,6 +9,11 @@ import * as fuzzysort from "fuzzysort"
 import { consoleManagedProviderLabel } from "../util/provider-origin"
 import { useConnected } from "./use-connected"
 import { useSync } from "../context/sync"
+import { Spinner } from "./spinner"
+
+export function isModelCatalogLoading(status: "loading" | "partial" | "complete") {
+  return status === "loading"
+}
 
 export function DialogModel(props: { providerID?: string }) {
   const local = useLocal()
@@ -164,6 +169,13 @@ export function DialogModel(props: { providerID?: string }) {
   return (
     <DialogSelect<ReturnType<typeof options>[number]["value"]>
       options={options()}
+      emptyView={
+        isModelCatalogLoading(sync.status) ? (
+          <box paddingLeft={4} paddingRight={4} paddingTop={1}>
+            <Spinner>Loading</Spinner>
+          </box>
+        ) : undefined
+      }
       actions={[
         {
           command: "model.dialog.provider",

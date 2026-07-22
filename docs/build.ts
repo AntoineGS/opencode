@@ -164,6 +164,12 @@ const html = `<!DOCTYPE html>
     .reference p { margin: 0.25rem 0 0; }
     .button { display: inline-flex; align-items: center; min-height: 38px; padding: 0 0.8rem; border: 1px solid var(--border); border-radius: 4px; color: var(--text); }
     .button:hover { background: var(--panel-soft); text-decoration: none; }
+    .panel-bar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.55rem 1.1rem; border-bottom: 1px solid var(--border); }
+    .panel-title { color: var(--dim); font-size: 0.94rem; }
+    .panel-link { display: inline-flex; align-items: center; gap: 0.45rem; color: var(--muted); font-size: 0.94rem; }
+    .panel-link:hover { color: var(--text); text-decoration: none; }
+    .panel-link svg { width: 1.1rem; height: 1.1rem; display: block; }
+    #plugin .lede { margin-bottom: 1.5rem; }
     footer { padding: 2rem 0; color: var(--dim); font-size: 0.9rem; }
     footer a { color: var(--muted); }
 
@@ -260,6 +266,29 @@ const html = `<!DOCTYPE html>
           </div>
         </div>
       </section>
+
+      <section id="plugin">
+        <div class="wrap">
+          <h2>Prefer a plugin?</h2>
+          <p class="lede">The prompt Vim mode is also available as a plugin for the official OpenCode — no fork required. Motions, operators, text objects, registers, and more, in the prompt only.</p>
+          <div class="install">
+            <div class="panel-bar">
+              <span class="panel-title">opencode-vim-plugin</span>
+              <a class="panel-link" href="https://github.com/leohenon/opencode-vim-plugin" aria-label="opencode-vim-plugin on GitHub">
+                <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+              </a>
+            </div>
+            <div class="command-row">
+              <div class="command-inner">
+                <span class="prompt" aria-hidden="true">$</span><code>opencode plugin @leohenon/opencode-vim-plugin --global</code>
+                <button class="copy" type="button" aria-label="Copy plugin install command" title="Copy">
+                  <svg viewBox="0 0 512 512" aria-hidden="true"><rect width="336" height="336" x="128" y="128" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="32" rx="57" ry="57"/><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="32" d="m383.5 128 .5-24a56.16 56.16 0 0 0-56-56H112a64.19 64.19 0 0 0-64 64v216a56.16 56.16 0 0 0 56 56h24"/></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
     </main>
 
     <footer>
@@ -271,7 +300,6 @@ const html = `<!DOCTYPE html>
     const installCommands = ${JSON.stringify(installCommands)}
     const installCommand = document.querySelector("#install-command")
     const installButtons = document.querySelectorAll("[data-install]")
-    const copyButton = document.querySelector(".copy")
 
     installButtons.forEach((button) => {
       button.addEventListener("click", () => {
@@ -280,12 +308,16 @@ const html = `<!DOCTYPE html>
       })
     })
 
-    copyButton.addEventListener("click", async () => {
-      await navigator.clipboard.writeText(installCommand.textContent)
-      copyButton.innerHTML = "✓"
-      setTimeout(() => {
-        copyButton.innerHTML = '<svg viewBox="0 0 512 512" aria-hidden="true"><rect width="336" height="336" x="128" y="128" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="32" rx="57" ry="57"/><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="32" d="m383.5 128 .5-24a56.16 56.16 0 0 0-56-56H112a64.19 64.19 0 0 0-64 64v216a56.16 56.16 0 0 0 56 56h24"/></svg>'
-      }, 900)
+    document.querySelectorAll(".copy").forEach((copyButton) => {
+      const icon = copyButton.innerHTML
+      const code = copyButton.closest(".command-inner").querySelector("code")
+      copyButton.addEventListener("click", async () => {
+        await navigator.clipboard.writeText(code.textContent)
+        copyButton.innerHTML = "✓"
+        setTimeout(() => {
+          copyButton.innerHTML = icon
+        }, 900)
+      })
     })
   </script>
 </body>

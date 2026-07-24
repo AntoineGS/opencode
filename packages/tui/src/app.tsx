@@ -555,6 +555,18 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   )
 
   const connected = useConnected()
+  function requireModelMetadata() {
+    if (sync.data.provider_status === "complete" && sync.data.agent_status === "complete") return true
+    const loading = sync.data.provider_status === "loading" || sync.data.agent_status === "loading"
+    toast.show({
+      title: loading ? "Models are still loading" : "Models are unavailable",
+      message: loading
+        ? "Wait for model and agent metadata before changing models or variants."
+        : "Model metadata could not be loaded. Try again after reconnecting.",
+      variant: loading ? "info" : "error",
+    })
+    return false
+  }
   const currentWorktreeWorkspace = createMemo(() => {
     const workspaceID = project.workspace.current()
     if (!workspaceID) return
@@ -650,6 +662,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         category: "Agent",
         hidden: true,
         run: () => {
+          if (!requireModelMetadata()) return
           local.model.cycle(1)
         },
       },
@@ -659,6 +672,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         category: "Agent",
         hidden: true,
         run: () => {
+          if (!requireModelMetadata()) return
           local.model.cycle(-1)
         },
       },
@@ -668,6 +682,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         category: "Agent",
         hidden: true,
         run: () => {
+          if (!requireModelMetadata()) return
           local.model.cycleFavorite(1)
         },
       },
@@ -677,6 +692,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         category: "Agent",
         hidden: true,
         run: () => {
+          if (!requireModelMetadata()) return
           local.model.cycleFavorite(-1)
         },
       },
@@ -712,6 +728,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         title: "Variant cycle",
         category: "Agent",
         run: () => {
+          if (!requireModelMetadata()) return
           local.model.variant.cycle()
         },
       },
@@ -719,9 +736,13 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         name: "variant.list",
         title: "Switch model variant",
         category: "Agent",
-        hidden: local.model.variant.list().length === 0,
+        hidden:
+          sync.data.provider_status === "complete" &&
+          sync.data.agent_status === "complete" &&
+          local.model.variant.list().length === 0,
         slashName: "variants",
         run: () => {
+          if (!requireModelMetadata()) return
           if (local.model.variant.list().length === 0) {
             return toast.show({
               title: "No variants available",

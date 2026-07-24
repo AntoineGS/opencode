@@ -2,7 +2,10 @@ import { describe, expect, test } from "bun:test"
 import { createApiForServer, createSdkForServer } from "./server"
 import { createCompatibleApi } from "./server-compat"
 
-function setup(protocol: "v1" | "v2" | Promise<"v1" | "v2">) {
+function setup(
+  protocol: "v1" | "v2" | Promise<"v1" | "v2">,
+  responses?: { vcs?: { branch: string; default_branch: string } },
+) {
   const requests: Request[] = []
   const fetcher = Object.assign(
     async (input: string | URL | Request, init?: RequestInit) => {
@@ -32,6 +35,8 @@ function setup(protocol: "v1" | "v2" | Promise<"v1" | "v2">) {
           delivery: "steer",
         })
       }
+      if (request.method === "GET" && new URL(request.url).pathname === "/vcs")
+        return Response.json(responses?.vcs ?? {})
       if (request.method === "GET") return Response.json([])
       return new Response(undefined, { status: 204 })
     },
@@ -109,5 +114,36 @@ describe("createCompatibleApi", () => {
     await api.session.list({ parentID: null, search: "session", limit: 50 })
 
     expect(new URL(requests[0]!.url).pathname).toBe("/experimental/session")
+  })
+
+  test("projects the V1 default branch", async () => {
+    const { api } = setup("v1", { vcs: { branch: "feature", default_branch: "dev" } })
+
+    expect(await api.vcs.get({ location: { directory: "/repo" } })).toMatchObject({
+      data: { branch: "feature", defaultBranch: "dev" },
+    })
+  })
+
+  test("translates current file searches to the V1 dirs parameter", async () => {
+    const { api, requests } = setup("v1")
+    await api.file.find({ location: { directory: "/repo" }, query: "src", type: "file", limit: 20 })
+
+    const url = new URL(requests[0]!.url)
+    expect(url.pathname).toBe("/find/file")
+    expect(url.searchParams.get("dirs")).toBe("false")
+    expect(url.searchParams.get("limit")).toBe("20")
+  })
+
+  test("routes V1 permission replies through the requested directory", async () => {
+    const { api, requests } = setup("v1")
+    await api.permission.reply({
+      sessionID: "ses_1",
+      requestID: "permission_1",
+      reply: "once",
+      location: { directory: "/other" },
+    })
+
+    expect(new URL(requests[0]!.url).pathname).toBe("/session/ses_1/permissions/permission_1")
+    expect(new URL(requests[0]!.url).searchParams.get("directory")).toBe("/other")
   })
 })

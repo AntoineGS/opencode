@@ -61,7 +61,12 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
         route,
         path === "/api/event"
           ? [{ id: "evt_mock_connected", type: "server.connected", data: {} }, ...(events?.map(currentEvent) ?? [])]
-          : events,
+          : [
+              ...(path === "/global/event"
+                ? [{ payload: { id: "evt_mock_connected", type: "server.connected", properties: {} } }]
+                : []),
+              ...(events ?? []),
+            ],
         config.eventRetry,
       )
     }
@@ -199,6 +204,12 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
     }
     if (/^\/api\/session\/[^/]+\/permission\/[^/]+\/reply$/.test(path) && route.request().method() === "POST") {
       return route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } })
+    }
+    if (/^\/question\/[^/]+\/(reply|reject)$/.test(path) && route.request().method() === "POST") {
+      return json(route, true)
+    }
+    if (/^\/session\/[^/]+\/permissions\/[^/]+$/.test(path) && route.request().method() === "POST") {
+      return json(route, true)
     }
     if (
       /^\/api\/session\/[^/]+\/(archive|rename|interrupt|revert\/clear|revert\/commit)$/.test(path) &&

@@ -319,13 +319,17 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         }
       })
 
-      const currentModel = createMemo(() => {
+      const validatedModel = createMemo(() => {
         const a = agent.current()
-        const validated = getFirstValidModel(
+        return getFirstValidModel(
           () => a && modelStore.model[a.name],
           () => a && a.model,
           fallbackModel,
         )
+      })
+
+      const currentModel = createMemo(() => {
+        const validated = validatedModel()
         if (validated) return validated
         // While the catalog is still loading, surface the optimistic model
         // (from config/recent) so the indicator is populated at first paint.
@@ -348,6 +352,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
       return {
         current: currentModel,
+        validated: validatedModel,
         get ready() {
           return modelStore.ready
         },

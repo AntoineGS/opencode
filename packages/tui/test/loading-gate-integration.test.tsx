@@ -38,6 +38,7 @@ import { ToastProvider } from "../src/ui/toast"
 
 type Subject =
   | "prompt"
+  | "prompt-model"
   | "prompt-command"
   | "local"
   | "local-model"
@@ -67,6 +68,14 @@ async function mountLoadingGate(root: string, subject: Subject) {
   const state = path.join(root, "state")
   await mkdir(state, { recursive: true })
   await Bun.write(path.join(state, "kv.json"), "{}")
+  if (subject === "prompt-model")
+    await Bun.write(
+      path.join(state, "model.json"),
+      JSON.stringify({
+        recent: [{ providerID: "cached", modelID: "model" }],
+        labels: { "cached/model": { providerName: "Cached", modelName: "Model" } },
+      }),
+    )
 
   const agents = deferredValue<unknown>()
   const catalog = deferredValue<unknown>()
@@ -92,7 +101,7 @@ async function mountLoadingGate(root: string, subject: Subject) {
       )
     if (subject === "sync-error" && (url.pathname === "/command" || url.pathname === "/provider/auth"))
       return json({ message: "unavailable" }, { status: 503 })
-    if (subject === "prompt-command" && url.pathname === "/agent")
+    if ((subject === "prompt-model" || subject === "prompt-command") && url.pathname === "/agent")
       return json([{ name: "build", mode: "primary", permission: {}, options: {} }])
     if (url.pathname === "/agent") return agents.promise.then((value) => json(value))
     if ((subject === "local-model" || subject === "prompt-command") && url.pathname === "/command")
@@ -125,7 +134,7 @@ async function mountLoadingGate(root: string, subject: Subject) {
         ],
         default: { test: "model" },
       })
-    if (subject === "dialog-model" && url.pathname === "/config/providers")
+    if ((subject === "prompt-model" || subject === "dialog-model") && url.pathname === "/config/providers")
       return catalog.promise.then((value) => json(value))
   })
   const config = createTuiResolvedConfig()
@@ -144,7 +153,7 @@ async function mountLoadingGate(root: string, subject: Subject) {
     project = useProject()
     sync = useSync()
     const dialog = useDialog()
-    if (subject === "prompt" || subject === "prompt-command")
+    if (subject === "prompt" || subject === "prompt-model" || subject === "prompt-command")
       return <Prompt disabled={props.disabled} ref={(value) => (prompt = value)} />
     if (subject === "dialog-model") return <DialogModel />
     if (subject === "dialog-select" || subject === "dialog-select-locked") {
@@ -305,6 +314,30 @@ test("real Prompt submission remains blocked until agents settle", async () => {
     await mounted.app.renderOnce()
     prompt.submit()
     await Bun.sleep(0)
+    expect(mounted.sessionRequests).toHaveLength(requests)
+  } finally {
+    await mounted.cleanup()
+  }
+})
+
+test("real Prompt keeps optimistic model metadata display-only until providers settle", async () => {
+  await using tmp = await tmpdir()
+  const mounted = await mountLoadingGate(tmp.path, "prompt-model")
+
+  try {
+    await waitFor(() => mounted.sync.data.agent_status === "complete", 2000, "agents did not settle")
+    await waitFor(
+      () => mounted.prompt() !== undefined && mounted.local.model.current() !== undefined,
+      2000,
+      "optimistic model did not load",
+    )
+    expect(mounted.sync.data.provider_status).toBe("loading")
+    const prompt = mounted.prompt()!
+    const requests = mounted.sessionRequests.length
+
+    prompt.set({ input: "do not send early", parts: [] })
+    prompt.submit()
+    await Bun.sleep(20)
     expect(mounted.sessionRequests).toHaveLength(requests)
   } finally {
     await mounted.cleanup()

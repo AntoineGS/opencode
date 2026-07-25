@@ -158,6 +158,74 @@ describe("tui sync", () => {
     }
   })
 
+  test("older overlapping bootstrap cannot replace the latest config", async () => {
+    await using tmp = await tmpdir()
+    await Bun.write(`${tmp.path}/kv.json`, "{}")
+    const requests: Array<{ promise: Promise<Response>; read: Promise<void>; resolve: (response: Response) => void }> = []
+    let configRequests = 0
+    const mounted = await mount(
+      (url) => {
+        if (url.pathname !== "/config") return
+        configRequests++
+        if (configRequests === 1) return json({ model: "initial/model" })
+        let resolveResponse!: (response: Response) => void
+        let resolveRead!: () => void
+        const promise = new Promise<Response>((done) => {
+          resolveResponse = done
+        })
+        const read = new Promise<void>((done) => {
+          resolveRead = done
+        })
+        requests.push({
+          promise,
+          read,
+          resolve(response) {
+            const text = response.text.bind(response)
+            Object.defineProperty(response, "text", {
+              value: async () => {
+                const body = await text()
+                setImmediate(resolveRead)
+                return body
+              },
+            })
+            resolveResponse(response)
+          },
+        })
+        return promise
+      },
+      tmp.path,
+    )
+    const until = async (label: string, condition: () => boolean) => {
+      try {
+        await wait(condition, 1000)
+      } catch {
+        throw new Error(`${label}; requests=${requests.length}; config=${mounted.sync.data.config.model}`)
+      }
+    }
+
+    try {
+      void mounted.sync.bootstrap()
+      await until("older config request did not start", () => requests.length === 1)
+      void mounted.sync.bootstrap()
+      await until("replacement config request did not start", () => requests.length === 2)
+
+      requests[1]!.resolve(json({ model: "current/model" }))
+      await until("replacement config did not apply", () => mounted.sync.data.config.model === "current/model")
+
+      requests[0]!.resolve(json({ model: "stale/model" }))
+      await Promise.race([
+        requests[0]!.read,
+        Bun.sleep(1000).then(() => {
+          throw new Error("stale config response was not consumed")
+        }),
+      ])
+      expect(mounted.sync.data.config.model).toBe("current/model")
+    } finally {
+      for (const request of requests) request.resolve(json({}))
+      mounted.app.renderer.destroy()
+    }
+  })
+
   test("empty agent response settles loading", async () => {
     await using tmp = await tmpdir()
     await Bun.write(`${tmp.path}/kv.json`, "{}")

@@ -75,6 +75,7 @@ import { usePromptWorkspace } from "./workspace"
 import { usePromptMove } from "./move"
 import { readLocalAttachment } from "./local-attachment"
 import { useLocation } from "../../context/location"
+import { resolveModelMetadataGate } from "../../app-state"
 
 registerOpencodeSpinner()
 
@@ -1411,7 +1412,17 @@ export function Prompt(props: PromptProps) {
       hasAgent: !!agent,
     })
     if (agentGate === "empty") return false
-    if (agentGate === "loading") return false
+    if (agentGate === "loading" || agentGate === "unavailable") {
+      toast.show({
+        title: agentGate === "loading" ? "Agents are still loading" : "Agents are unavailable",
+        message:
+          agentGate === "loading"
+            ? "Wait for agent metadata before submitting a prompt."
+            : "Agent metadata could not be loaded. Try again after reconnecting.",
+        variant: agentGate === "loading" ? "info" : "error",
+      })
+      return false
+    }
     if (!agent) return false
     const commandGate = resolveSlashCommandGate({
       mode: store.mode,
@@ -1434,7 +1445,19 @@ export function Prompt(props: PromptProps) {
       void exit()
       return true
     }
-    const selectedModel = local.model.current()
+    const modelGate = resolveModelMetadataGate(sync.data.provider_status, sync.data.agent_status)
+    if (modelGate !== "ready") {
+      toast.show({
+        title: modelGate === "loading" ? "Models are still loading" : "Models are unavailable",
+        message:
+          modelGate === "loading"
+            ? "Wait for model metadata before submitting a prompt."
+            : "Model metadata could not be loaded. Try again after reconnecting.",
+        variant: modelGate === "loading" ? "info" : "error",
+      })
+      return false
+    }
+    const selectedModel = local.model.validated()
     if (!selectedModel) {
       void promptModelWarning()
       return false

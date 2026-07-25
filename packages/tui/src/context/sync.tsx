@@ -537,13 +537,12 @@ export const {
             const config = responses[4]
             const sessions = responses[5]
 
+            if (!current()) return
             batch(() => {
-              if (current()) {
-                setStore("provider", reconcile(providers.providers))
-                setStore("provider_default", reconcile(providers.default))
-                setStore("provider_next", reconcile(providerList))
-                setStore("provider_status", "complete")
-              }
+              setStore("provider", reconcile(providers.providers))
+              setStore("provider_default", reconcile(providers.default))
+              setStore("provider_next", reconcile(providerList))
+              setStore("provider_status", "complete")
               setStore("capabilities", "experimentalBackgroundSubagents", capabilities?.backgroundSubagents === true)
               setStore("console_state", reconcile(consoleState))
               setStore("config", reconcile(config))
@@ -552,11 +551,20 @@ export const {
           })
         })
         .then(() => {
+          if (!current()) return
           if (store.status !== "complete") setStore("status", "partial")
           // non-blocking
           void Promise.all([
-            ...(args.continue ? [] : [sessionListPromise.then((sessions) => setStore("session", reconcile(sessions)))]),
-            consoleStatePromise.then((consoleState) => setStore("console_state", reconcile(consoleState))),
+            ...(args.continue
+              ? []
+              : [
+                  sessionListPromise.then((sessions) => {
+                    if (current()) setStore("session", reconcile(sessions))
+                  }),
+                ]),
+            consoleStatePromise.then((consoleState) => {
+              if (current()) setStore("console_state", reconcile(consoleState))
+            }),
             sdk.client.command
               .list({ workspace }, { throwOnError: true })
               .then((x) => {
@@ -589,7 +597,9 @@ export const {
               .catch(() => current() && setStore("mcp_status", "error")),
             sdk.client.experimental.resource
               .list({ workspace })
-              .then((x) => setStore("mcp_resource", reconcile(x.data ?? {}))),
+              .then((x) => {
+                if (current()) setStore("mcp_resource", reconcile(x.data ?? {}))
+              }),
             sdk.client.formatter
               .status({ workspace }, { throwOnError: true })
               .then((x) => {
@@ -601,7 +611,7 @@ export const {
               })
               .catch(() => current() && setStore("formatter_status", "error")),
             sdk.client.session.status({ workspace }).then((x) => {
-              setStore("session_status", reconcile(x.data ?? {}))
+              if (current()) setStore("session_status", reconcile(x.data ?? {}))
             }),
             sdk.client.provider
               .auth({ workspace }, { throwOnError: true })
@@ -613,23 +623,24 @@ export const {
                 })
               })
               .catch(() => current() && setStore("provider_auth_status", "error")),
-            sdk.client.vcs.get({ workspace }).then((x) => setStore("vcs", reconcile(x.data))),
+            sdk.client.vcs.get({ workspace }).then((x) => {
+              if (current()) setStore("vcs", reconcile(x.data))
+            }),
             project.workspace.sync(),
           ]).then(() => {
-            setStore("status", "complete")
+            if (current()) setStore("status", "complete")
           })
         })
         .catch(async (e) => {
-          if (current()) {
-            batch(() => {
-              setStore("provider_status", "error")
-              setStore("command_status", "error")
-              setStore("provider_auth_status", "error")
-              setStore("mcp_status", "error")
-              setStore("lsp_status", "error")
-              setStore("formatter_status", "error")
-            })
-          }
+          if (!current()) return
+          batch(() => {
+            setStore("provider_status", "error")
+            setStore("command_status", "error")
+            setStore("provider_auth_status", "error")
+            setStore("mcp_status", "error")
+            setStore("lsp_status", "error")
+            setStore("formatter_status", "error")
+          })
           console.error("tui bootstrap failed", {
             error: e instanceof Error ? e.message : String(e),
             name: e instanceof Error ? e.name : undefined,

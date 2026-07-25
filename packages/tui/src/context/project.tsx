@@ -34,8 +34,11 @@ export const { use: useProject, provider: ProjectProvider } = createSimpleContex
         status: {} as Record<string, WorkspaceStatus>,
       },
     })
+    let projectSyncGeneration = 0
+    let workspaceSyncGeneration = 0
 
     async function sync() {
+      const generation = ++projectSyncGeneration
       const workspace = store.workspace.current
       const [instancePath, project] = await Promise.all([
         sdk.client.path.get({ workspace }),
@@ -44,19 +47,23 @@ export const { use: useProject, provider: ProjectProvider } = createSimpleContex
       const directories = project.data?.id
         ? await sdk.client.project.directories({ projectID: project.data.id, workspace })
         : undefined
+      if (generation !== projectSyncGeneration) return false
       batch(() => {
         setStore("instance", "path", reconcile(instancePath.data || defaultPath))
         setStore("project", "id", project.data?.id)
         setStore("project", "worktree", project.data?.worktree)
         setStore("project", "mainDir", directories?.data?.findLast((item) => item.strategy === undefined)?.directory)
       })
+      return true
     }
 
     async function syncWorkspace() {
+      const generation = ++workspaceSyncGeneration
       const listed = await sdk.client.experimental.workspace.list().catch(() => undefined)
       if (!listed?.data) return false
       const status = await sdk.client.experimental.workspace.status().catch(() => undefined)
       if (!status?.data) return false
+      if (generation !== workspaceSyncGeneration) return false
       const next = Object.fromEntries((status?.data ?? []).map((item) => [item.workspaceID, item.status]))
 
       batch(() => {

@@ -25,7 +25,7 @@ import {
   on,
 } from "solid-js"
 import { TuiPathsProvider, TuiStartupProvider, TuiTerminalEnvironmentProvider } from "./context/runtime"
-import { createPasteSummaryEnabled, resolveSkipInitialLoading } from "./app-state"
+import { createPasteSummaryEnabled, resolveModelMetadataGate, resolveSkipInitialLoading } from "./app-state"
 import { DialogProvider, useDialog } from "./ui/dialog"
 import { DialogProvider as DialogProviderList } from "./component/dialog-provider"
 import { ErrorComponent } from "./component/error-component"
@@ -485,16 +485,6 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   onMount(() => {
     batch(() => {
       if (args.agent) local.agent.set(args.agent)
-      if (args.model) {
-        const { providerID, modelID } = Model.parse(args.model)
-        if (!providerID || !modelID)
-          return toast.show({
-            variant: "warning",
-            message: `Invalid model format: ${args.model}`,
-            duration: 3000,
-          })
-        local.model.set({ providerID, modelID }, { recent: true })
-      }
       if (args.sessionID && !args.fork) {
         route.navigate({
           type: "session",
@@ -502,6 +492,33 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         })
       }
     })
+  })
+
+  let modelArgHandled = false
+  createEffect(() => {
+    if (modelArgHandled || !args.model) return
+    const { providerID, modelID } = Model.parse(args.model)
+    if (!providerID || !modelID) {
+      modelArgHandled = true
+      toast.show({
+        variant: "warning",
+        message: `Invalid model format: ${args.model}`,
+        duration: 3000,
+      })
+      return
+    }
+    const gate = resolveModelMetadataGate(sync.data.provider_status, sync.data.agent_status)
+    if (gate === "loading") return
+    modelArgHandled = true
+    if (gate === "unavailable") {
+      toast.show({
+        variant: "error",
+        message: `Model metadata is unavailable; could not select ${args.model}`,
+        duration: 3000,
+      })
+      return
+    }
+    local.model.set({ providerID, modelID }, { recent: true })
   })
 
   let continued = false

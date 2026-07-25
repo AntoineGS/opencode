@@ -333,6 +333,7 @@ test("default fast boot starts plugins before the provider catalog settles", asy
   const original = process.env.OPENCODE_NO_FAST_BOOT
   delete process.env.OPENCODE_NO_FAST_BOOT
   let started = false
+  let api: TuiPluginApi | undefined
   let task: Promise<unknown> | undefined
 
   try {
@@ -345,7 +346,8 @@ test("default fast boot starts plugins before the provider catalog settles", asy
         events: events.source,
         args: {},
         pluginHost: {
-          async start() {
+          async start(input) {
+            api = input.api
             started = true
           },
           async dispose() {},
@@ -356,8 +358,10 @@ test("default fast boot starts plugins before the provider catalog settles", asy
     await providerRequestStarted.promise
     await waitFor(() => started)
     expect(providerRequestSettled).toBe(false)
+    expect(api?.state.ready).toBe(false)
     providers.resolve(json({ providers: {}, default: {} }))
     await waitFor(() => providerRequestSettled)
+    await waitFor(() => api?.state.ready === true)
   } finally {
     if (original === undefined) delete process.env.OPENCODE_NO_FAST_BOOT
     else process.env.OPENCODE_NO_FAST_BOOT = original

@@ -116,6 +116,9 @@ export const { use: useProject, provider: ProjectProvider } = createSimpleContex
         statuses() {
           return store.workspace.status
         },
+        invalidate() {
+          workspaceSyncGeneration++
+        },
         sync: syncWorkspace,
       },
       sync,

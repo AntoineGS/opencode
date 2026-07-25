@@ -226,6 +226,62 @@ describe("tui sync", () => {
     }
   })
 
+  test("replacement bootstrap invalidates an older workspace refresh", async () => {
+    await using tmp = await tmpdir()
+    await Bun.write(`${tmp.path}/kv.json`, "{}")
+    type Pending = { promise: Promise<Response>; resolve: (response: Response) => void }
+    const lists: Pending[] = []
+    const statuses: Pending[] = []
+    let configRequests = 0
+    let replacementConfig: Pending | undefined
+    let defer = false
+    const pending = (target: Pending[]) => {
+      let resolve!: (response: Response) => void
+      const promise = new Promise<Response>((done) => {
+        resolve = done
+      })
+      target.push({ promise, resolve })
+      return promise
+    }
+    const mounted = await mount((url) => {
+      if (url.pathname === "/config") {
+        configRequests++
+        if (configRequests === 3) {
+          const target: Pending[] = []
+          const promise = pending(target)
+          replacementConfig = target[0]
+          return promise
+        }
+      }
+      if (!defer) return
+      if (url.pathname === "/experimental/workspace") return pending(lists)
+      if (url.pathname === "/experimental/workspace/status") return pending(statuses)
+    }, tmp.path)
+
+    try {
+      mounted.project.workspace.set("old")
+      defer = true
+      void mounted.sync.bootstrap()
+      await wait(() => lists.length === 1)
+
+      mounted.project.workspace.set("replacement")
+      void mounted.sync.bootstrap()
+      await wait(() => replacementConfig !== undefined)
+
+      lists[0]!.resolve(json([]))
+      await wait(() => statuses.length === 1)
+      statuses[0]!.resolve(json([]))
+      await Bun.sleep(20)
+
+      expect(mounted.project.workspace.current()).toBe("replacement")
+    } finally {
+      replacementConfig?.resolve(json({}))
+      for (const request of lists) request.resolve(json([]))
+      for (const request of statuses) request.resolve(json([]))
+      mounted.app.renderer.destroy()
+    }
+  })
+
   test("empty agent response settles loading", async () => {
     await using tmp = await tmpdir()
     await Bun.write(`${tmp.path}/kv.json`, "{}")

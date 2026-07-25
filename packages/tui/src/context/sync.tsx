@@ -466,6 +466,7 @@ export const {
       const workspace = project.workspace.current()
       const generation = ++bootstrapGeneration
       const current = () => generation === bootstrapGeneration
+      project.workspace.invalidate()
       batch(() => {
         setStore("agent_status", "loading")
         setStore("agent", reconcile([]))

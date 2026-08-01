@@ -3,6 +3,8 @@ import { useSync } from "../../context/sync"
 import { createMemo, Show } from "solid-js"
 import { useTheme } from "../../context/theme"
 import { useTuiConfig } from "../../config"
+import { useBindings } from "../../keymap"
+import { type ScrollBoxRenderable } from "@opentui/core"
 import { InstallationChannel, InstallationVersion } from "@opencode-ai/core/installation/version"
 import { usePluginRuntime } from "../../plugin/runtime"
 
@@ -22,6 +24,16 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
     return project.workspace.get(workspaceID)
   }
   const scrollAcceleration = createMemo(() => getScrollAcceleration(tuiConfig))
+  let scroll: ScrollBoxRenderable | undefined
+  const commands = createSidebarScrollCommands(() => scroll)
+
+  useBindings(() => ({
+    commands,
+    bindings: tuiConfig.keybinds.gather(
+      "session.sidebar",
+      commands.map((command) => command.name),
+    ),
+  }))
 
   return (
     <Show when={session()}>
@@ -36,6 +48,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
         position={props.overlay ? "absolute" : "relative"}
       >
         <scrollbox
+          ref={(element: ScrollBoxRenderable) => (scroll = element)}
           flexGrow={1}
           scrollAcceleration={scrollAcceleration()}
           verticalScrollbarOptions={{
@@ -100,4 +113,43 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
       </box>
     </Show>
   )
+}
+
+export function createSidebarScrollCommands(getScroll: () => ScrollBoxRenderable | undefined) {
+  return [
+    {
+      name: "session.sidebar.line.up",
+      title: "Scroll sidebar up",
+      category: "Session",
+      run() {
+        getScroll()?.scrollBy(-1)
+      },
+    },
+    {
+      name: "session.sidebar.line.down",
+      title: "Scroll sidebar down",
+      category: "Session",
+      run() {
+        getScroll()?.scrollBy(1)
+      },
+    },
+    {
+      name: "session.sidebar.page.up",
+      title: "Page sidebar up",
+      category: "Session",
+      run() {
+        const scroll = getScroll()
+        if (scroll) scroll.scrollBy(-Math.floor(scroll.height / 2))
+      },
+    },
+    {
+      name: "session.sidebar.page.down",
+      title: "Page sidebar down",
+      category: "Session",
+      run() {
+        const scroll = getScroll()
+        if (scroll) scroll.scrollBy(Math.floor(scroll.height / 2))
+      },
+    },
+  ]
 }

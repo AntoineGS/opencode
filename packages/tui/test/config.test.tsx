@@ -120,6 +120,14 @@ test("resolves vim mode-scoped keybinds", () => {
           input_move_down: "j",
           input_move_up: [{ key: "k", preventDefault: false }],
         },
+test("resolves sidebar scroll keybinds", () => {
+  const config = resolve(
+    {
+      keybinds: {
+        sidebar_line_up: "ctrl+k",
+        sidebar_line_down: "ctrl+j",
+        sidebar_page_up: "ctrl+u",
+        sidebar_page_down: "ctrl+d",
       },
     },
     { terminalSuspend: true },
@@ -149,6 +157,14 @@ test("vim mode-scoped keybinds re-enable a globally disabled command", () => {
   )
 
   expect(config.keybinds.get("input.move.down")).toMatchObject([{ key: "j", cmd: "input.move.down", vimMode: "normal" }])
+  expect(config.keybinds.get("session.sidebar.line.up")).toMatchObject([{ key: "ctrl+k" }])
+  expect(config.keybinds.get("session.sidebar.line.down")).toMatchObject([{ key: "ctrl+j" }])
+  expect(config.keybinds.get("session.sidebar.page.up")).toMatchObject([{ key: "ctrl+u" }])
+  expect(config.keybinds.get("session.sidebar.page.down")).toMatchObject([{ key: "ctrl+d" }])
+  expect(TuiKeybind.defaultValue("sidebar_line_up")).toBe("none")
+  expect(TuiKeybind.defaultValue("sidebar_line_down")).toBe("none")
+  expect(TuiKeybind.defaultValue("sidebar_page_up")).toBe("none")
+  expect(TuiKeybind.defaultValue("sidebar_page_down")).toBe("none")
 })
 
 test("disables suspend and assigns ctrl+z to undo when unsupported", () => {

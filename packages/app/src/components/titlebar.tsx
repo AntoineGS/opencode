@@ -113,9 +113,9 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
     return {
       visible: version !== undefined || installing,
       installing,
-      label: "Update",
+      label: language.t("titlebar.update"),
       ariaLabel: language.t("toast.update.action.installRestart"),
-      title: version ? `Update ${version}` : undefined,
+      title: version ? language.t("titlebar.updateVersion", { version }) : undefined,
       onInstall: () => props.update?.install(),
     }
   })
@@ -395,27 +395,25 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
                   }}
                   onReorder={(keys) => tabsStoreActions.reorder(keys)}
                 />
-                <Show when={!creating()}>
-                  <TooltipV2
-                    placement="bottom"
-                    value={
-                      <>
-                        {language.t("command.session.new")}
-                        <KeybindV2 keys={newTabTooltipKeybind(command)} variant="neutral" />
-                      </>
-                    }
-                  >
-                    <IconButtonV2
-                      type="button"
-                      variant="ghost-muted"
-                      size="large"
-                      class="shrink-0"
-                      icon={<IconV2 name="plus" />}
-                      onClick={openNewTab}
-                      aria-label={language.t("command.session.new")}
-                    />
-                  </TooltipV2>
-                </Show>
+                <TooltipV2
+                  placement="bottom"
+                  value={
+                    <>
+                      {language.t("command.session.new")}
+                      <KeybindV2 keys={newTabTooltipKeybind(command)} variant="neutral" />
+                    </>
+                  }
+                >
+                  <IconButtonV2
+                    type="button"
+                    variant="ghost-muted"
+                    size="large"
+                    class="shrink-0"
+                    icon={<IconV2 name="plus" />}
+                    onClick={openNewTab}
+                    aria-label={language.t("command.session.new")}
+                  />
+                </TooltipV2>
                 <div class="flex-1" />
                 <TitlebarV2Right state={v2RightState()} />
               </div>
@@ -517,7 +515,7 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
                   <div
                     class="flex items-center shrink-0"
                     classList={{
-                      "-translate-x-[36px]": layout.sidebar.opened() && !!params.dir,
+                      "ltr:-translate-x-[36px] rtl:translate-x-[36px]": layout.sidebar.opened() && !!params.dir,
                       "duration-180 ease-out": !layout.sidebar.opened(),
                       "duration-180 ease-in": layout.sidebar.opened(),
                     }}

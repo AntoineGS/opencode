@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 
 import { $ } from "bun"
+import { mkdir } from "node:fs/promises"
 import { parseArgs } from "util"
 
 type Pull = {
@@ -69,29 +70,43 @@ if (authors.size === 0) {
 }
 
 const readme = await Bun.file(values.readme!).text()
-const missing = [...authors.keys()].filter((login) => !new RegExp(`github\\.com/${escapeRegExp(login)}(?:["/.])`, "i").test(readme))
+const missing = [...authors.keys()].filter(
+  (login) => !new RegExp(`github\\.com/${escapeRegExp(login)}(?:["/.])`, "i").test(readme),
+)
 
 if (missing.length === 0) {
   console.log("All release contributors are already listed")
   process.exit(0)
 }
 
+await saveAvatars(missing)
 await Bun.write(values.readme!, addContributors(readme, missing))
 console.log(`Added contributors: ${missing.map((login) => `@${login}`).join(", ")}`)
 
+async function saveAvatars(logins: string[]) {
+  const directory = "assets/contributors"
+  await mkdir(directory, { recursive: true })
+
+  await Promise.all(
+    logins.map(async (login) => {
+      const url = `https://images.weserv.nl/?url=github.com/${login}.png&w=80&h=80&fit=cover&mask=circle&output=png`
+      const response = await fetch(url)
+      if (!response.ok) throw new Error(`Failed to generate avatar for @${login}: ${response.status}`)
+      await Bun.write(`${directory}/${login}.png`, await response.arrayBuffer())
+    }),
+  )
+}
+
 function addContributors(readme: string, logins: string[]) {
-  const heading = "## Contributors"
+  const heading = "## Thanks to all contributors!"
   const headingIndex = readme.indexOf(heading)
   if (headingIndex === -1) throw new Error(`${values.readme} is missing ${heading}`)
 
-  const thanks = "Thanks to everyone who contributed."
-  const thanksIndex = readme.indexOf(thanks, headingIndex)
-  const contentAnchor =
-    thanksIndex === -1 ? readme.indexOf("\n", headingIndex + heading.length) : thanksIndex + thanks.length
-  if (contentAnchor === -1) throw new Error(`${values.readme} has an invalid Contributors section`)
+  const contentAnchor = readme.indexOf("\n", headingIndex + heading.length)
+  if (contentAnchor === -1) throw new Error(`${values.readme} has an invalid contributors section`)
 
   const contentStart = readme.indexOf("\n\n", contentAnchor)
-  if (contentStart === -1) throw new Error(`${values.readme} has an invalid Contributors section`)
+  if (contentStart === -1) throw new Error(`${values.readme} has an invalid contributors section`)
 
   const start = contentStart + 2
   const rest = readme.slice(start)
@@ -101,7 +116,8 @@ function addContributors(readme: string, logins: string[]) {
   const suffix = readme.slice(end)
   const current = readme.slice(start, end).trim()
   const avatars = logins.map(
-    (login) => `<a href="https://github.com/${login}"><img src="https://github.com/${login}.png" width="40" height="40" /></a>`,
+    (login) =>
+      `<a href="https://github.com/${login}"><img src="./assets/contributors/${login}.png" alt="@${login}" width="40" height="40" /></a>`,
   )
   const next = current ? `${current} ${avatars.join(" ")}` : avatars.join(" ")
   return readme.slice(0, start) + next + (suffix ? `\n\n${suffix}` : readme.endsWith("\n") ? "\n" : "")

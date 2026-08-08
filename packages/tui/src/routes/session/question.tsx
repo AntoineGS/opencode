@@ -17,6 +17,7 @@ import {
 } from "../../keymap"
 import type { SingleLineVimKeyEvent } from "../../component/vim/single-line-vim-motions"
 import { createModalInputControls, type ModalInputMode } from "../../component/vim/modal-input-controls"
+import { vimCursorStyle } from "../../component/vim/cursor-style"
 import { useVimEnabled } from "../../component/vim"
 
 const QUESTION_MODE = "question"
@@ -86,9 +87,13 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
     vimEscapeSequence: () => tuiConfig.vim_escape_sequence,
   })
 
+  const answerCursorStyle = createMemo(() =>
+    vimCursorStyle(modalInputEnabled() ? store.inputMode : undefined, tuiConfig.cursor),
+  )
+
   createEffect(() => {
     if (!textarea || textarea.isDestroyed) return
-    textarea.cursorStyle = modalInputEnabled() && store.inputMode === "normal" ? { style: "block", blinking: false } : { style: "line", blinking: true }
+    textarea.cursorStyle = answerCursorStyle()
   })
 
   function submit() {
@@ -558,11 +563,7 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
                         textColor={theme.text}
                         focusedTextColor={theme.text}
                         cursorColor={theme.primary}
-                        cursorStyle={
-                          modalInputEnabled() && store.inputMode === "normal"
-                            ? { style: "block", blinking: false }
-                            : { style: "line", blinking: true }
-                        }
+                        cursorStyle={answerCursorStyle()}
                         onKeyDown={(event: SingleLineVimKeyEvent) => {
                           if (handleAnswerKey(event)) return
                         }}

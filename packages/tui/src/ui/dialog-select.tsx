@@ -16,6 +16,7 @@ import * as fuzzysort from "fuzzysort"
 import { isDeepEqual } from "remeda"
 import { useDialog, type DialogContext } from "./dialog"
 import { createModalInputControls, type ModalInputKeyEvent, type ModalInputMode } from "../component/vim/modal-input-controls"
+import { vimCursorStyle } from "../component/vim/cursor-style"
 import { Locale } from "../util/locale"
 import { getScrollAcceleration } from "../util/scroll"
 import { useTuiConfig } from "../config"
@@ -166,9 +167,13 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     vimEscapeSequence: () => tuiConfig.vim_escape_sequence,
   })
 
+  const filterCursorStyle = createMemo(() =>
+    vimCursorStyle(modalInputEnabled() ? store.inputMode : undefined, tuiConfig.cursor),
+  )
+
   createEffect(() => {
     if (!input || input.isDestroyed) return
-    input.cursorStyle = modalInputEnabled() && store.inputMode === "normal" ? { style: "block", blinking: false } : { style: "line", blinking: true }
+    input.cursorStyle = filterCursorStyle()
   })
 
   function enterNormalMode() {
@@ -668,9 +673,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
               }}
               focusedBackgroundColor={theme.backgroundPanel}
               cursorColor={theme.primary}
-              cursorStyle={
-                modalInputEnabled() && store.inputMode === "normal" ? { style: "block", blinking: false } : { style: "line", blinking: true }
-              }
+              cursorStyle={filterCursorStyle()}
               focusedTextColor={theme.textMuted}
               ref={(r) => {
                 input = r

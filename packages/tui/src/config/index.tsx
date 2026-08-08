@@ -30,6 +30,14 @@ export const ScrollAcceleration = Schema.Struct({
 export const DiffStyle = Schema.Literals(["auto", "stacked"]).annotate({
   description: "Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column",
 })
+export const Cursor = Schema.Struct({
+  style: Schema.optional(Schema.Literals(["block", "underline", "line", "default"])).annotate({
+    description: "Cursor shape. Use 'default' to preserve the terminal setting",
+  }),
+  blinking: Schema.optional(Schema.Boolean).annotate({
+    description: "Whether the cursor blinks. Has no effect when style is 'default'",
+  }),
+}).annotate({ description: "Terminal cursor settings" })
 
 const VimLangmapCharacter = Schema.String.check(Schema.isPattern(/^.$/u)).annotate({
   description: "A single Vim langmap character",
@@ -88,6 +96,7 @@ export const Info = Schema.Struct({
   scroll_speed: Schema.optional(ScrollSpeed).annotate({ description: "TUI scroll speed" }),
   scroll_acceleration: Schema.optional(ScrollAcceleration),
   diff_style: Schema.optional(DiffStyle),
+  cursor: Schema.optional(Cursor),
   vim: Schema.optional(Schema.Boolean).annotate({ description: "Enable vim-style input for the prompt" }),
   vim_modal_input: Schema.optional(Schema.Boolean).annotate({
     description: "Enable Vim-style modal controls for command palette and small dialog inputs",
@@ -114,7 +123,7 @@ export const Info = Schema.Struct({
 })
 export type Info = Schema.Schema.Type<typeof Info>
 
-export type Resolved = Omit<Info, "attention" | "keybinds" | "leader_timeout" | "mouse" | "vim_showbreak"> & {
+export type Resolved = Omit<Info, "attention" | "keybinds" | "leader_timeout" | "mouse" | "cursor" | "vim_showbreak"> & {
   attention: {
     enabled: boolean
     notifications: boolean
@@ -126,6 +135,10 @@ export type Resolved = Omit<Info, "attention" | "keybinds" | "leader_timeout" | 
   keybinds: TuiKeybind.BindingLookupView
   leader_timeout: number
   mouse: boolean
+  cursor?: {
+    style: "block" | "underline" | "line" | "default"
+    blinking: boolean
+  }
   vim_showbreak: boolean
 }
 
@@ -162,6 +175,12 @@ export function resolve(input: Info, options: ResolveOptions): Resolved {
     }),
     leader_timeout: input.leader_timeout ?? LeaderTimeoutDefault,
     mouse: input.mouse ?? true,
+    cursor: input.cursor
+      ? {
+          style: input.cursor.style ?? "block",
+          blinking: input.cursor.blinking ?? true,
+        }
+      : undefined,
     vim_modal_input: input.vim_modal_input ?? true,
     vim_line_motions: input.vim_line_motions ?? "logical",
     vim_showbreak: input.vim_showbreak ?? false,

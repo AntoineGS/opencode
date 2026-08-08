@@ -56,6 +56,7 @@ import { useArgs } from "../../context/args"
 import { useVimEnabled } from "../vim"
 import type { CopyModeAdapter } from "../vim/copy-adapter"
 import { clearSelection } from "../vim/vim-motions"
+import { vimCursorStyle } from "../vim/cursor-style"
 import { usePromptVim } from "./vim"
 import { emptyRows } from "./empty-selection"
 import { drawShowbreak } from "./showbreak"
@@ -338,6 +339,13 @@ export function Prompt(props: PromptProps) {
     }, 0)
   })
 
+  function cursorStyle() {
+    if (!vimEnabled() || store.mode !== "normal") return vimCursorStyle(undefined, tuiConfig.cursor)
+    if (vimState.isInsert()) return vimCursorStyle("insert", tuiConfig.cursor)
+    if (vimState.isReplace()) return vimCursorStyle("replace", tuiConfig.cursor)
+    return vimCursorStyle("normal", tuiConfig.cursor)
+  }
+
   createEffect(() => {
     if (!input || input.isDestroyed) return
     if (props.disabled || vimState.isCopy()) {
@@ -363,23 +371,7 @@ export function Prompt(props: PromptProps) {
 
   createEffect(() => {
     if (!input || input.isDestroyed) return
-    if (vimEnabled() && store.mode === "normal") {
-      if (vimState.isCopy()) {
-        input.cursorStyle = { style: "block", blinking: false }
-        return
-      }
-      if (vimState.isInsert()) {
-        input.cursorStyle = { style: "line", blinking: true }
-        return
-      }
-      if (vimState.isReplace()) {
-        input.cursorStyle = { style: "underline", blinking: false }
-        return
-      }
-      input.cursorStyle = { style: "block", blinking: false }
-      return
-    }
-    input.cursorStyle = { style: "line", blinking: true }
+    input.cursorStyle = cursorStyle()
   })
 
   const lastUserMessage = createMemo(() => {
@@ -2012,12 +2004,14 @@ export function Prompt(props: PromptProps) {
                   // setTimeout is a workaround and needs to be addressed properly
                   if (!input || input.isDestroyed) return
                   input.cursorColor = props.disabled ? theme.backgroundElement : theme.text
+                  input.cursorStyle = cursorStyle()
                   syncScrollbar()
                 }, 0)
               }}
               onMouseDown={(r: MouseEvent) => r.target?.focus()}
               focusedBackgroundColor={theme.backgroundElement}
               cursorColor={props.disabled ? theme.backgroundElement : theme.text}
+              cursorStyle={cursorStyle()}
               syntaxStyle={syntax()}
               />
               <Show when={showScrollbar()}>
